@@ -308,6 +308,17 @@ Error:
 }
 ```
 
+**tabs.deleteCookie** - Delete a cookie
+```json
+{
+  "command": "tabs.deleteCookie",
+  "params": {
+    "url": "https://example.com",
+    "name": "session_id"
+  }
+}
+```
+
 **tabs.getLocalStorage** - Get localStorage
 ```json
 {
@@ -327,6 +338,49 @@ Error:
     "tabId": 123,
     "key": "user_preferences",
     "value": "{\"theme\":\"dark\"}"
+  }
+}
+```
+
+**tabs.clearLocalStorage** - Clear all localStorage
+```json
+{
+  "command": "tabs.clearLocalStorage",
+  "params": {
+    "tabId": 123
+  }
+}
+```
+
+**tabs.getSessionStorage** - Get sessionStorage
+```json
+{
+  "command": "tabs.getSessionStorage",
+  "params": {
+    "tabId": 123,
+    "key": "temp_data"
+  }
+}
+```
+
+**tabs.setSessionStorage** - Set sessionStorage
+```json
+{
+  "command": "tabs.setSessionStorage",
+  "params": {
+    "tabId": 123,
+    "key": "temp_data",
+    "value": "{\"sessionId\":\"abc123\"}"
+  }
+}
+```
+
+**tabs.clearSessionStorage** - Clear all sessionStorage
+```json
+{
+  "command": "tabs.clearSessionStorage",
+  "params": {
+    "tabId": 123
   }
 }
 ```
