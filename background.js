@@ -282,7 +282,7 @@ async function handleClick(params) {
       }
       return false;
     },
-    args: [params.selector, params.index]
+    args: [params.selector, params.index || 0]
   });
   return { success: results[0]?.result || false };
 }
