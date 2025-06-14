@@ -88,7 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   refreshTabsBtn.addEventListener('click', loadTabs);
   
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message) => {
     if (message.type === 'connectionStatusChanged') {
       isConnected = message.connected;
       updateConnectionStatus();

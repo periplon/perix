@@ -17,27 +17,27 @@ function handleBackgroundMessage(message) {
   const { command, params, id } = message;
   
   switch (command) {
-    case 'getElementInfo':
-      getElementInfo(params, id);
-      break;
-    case 'highlightElement':
-      highlightElement(params, id);
-      break;
-    case 'simulateEvent':
-      simulateEvent(params, id);
-      break;
-    case 'extractStructuredData':
-      extractStructuredData(params, id);
-      break;
-    case 'observeMutations':
-      observeMutations(params, id);
-      break;
-    case 'injectCSS':
-      injectCSS(params, id);
-      break;
-    case 'removeCSS':
-      removeCSS(params, id);
-      break;
+  case 'getElementInfo':
+    getElementInfo(params, id);
+    break;
+  case 'highlightElement':
+    highlightElement(params, id);
+    break;
+  case 'simulateEvent':
+    simulateEvent(params, id);
+    break;
+  case 'extractStructuredData':
+    extractStructuredData(params, id);
+    break;
+  case 'observeMutations':
+    observeMutations(params, id);
+    break;
+  case 'injectCSS':
+    injectCSS(params, id);
+    break;
+  case 'removeCSS':
+    removeCSS(params, id);
+    break;
   }
 }
 
@@ -131,7 +131,7 @@ function highlightElement(params, id) {
     const elements = document.querySelectorAll(params.selector);
     const originalStyles = [];
     
-    elements.forEach((element, index) => {
+    elements.forEach((element) => {
       originalStyles.push({
         element,
         outline: element.style.outline,

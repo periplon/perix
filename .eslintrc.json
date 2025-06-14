@@ -3,7 +3,8 @@
     "browser": true,
     "es2021": true,
     "webextensions": true,
-    "jest": true
+    "jest": true,
+    "node": true
   },
   "extends": "eslint:recommended",
   "parserOptions": {
@@ -14,6 +15,21 @@
     "indent": ["error", 2],
     "linebreak-style": ["error", "unix"],
     "quotes": ["error", "single"],
-    "semi": ["error", "always"]
-  }
+    "semi": ["error", "always"],
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }]
+  },
+  "overrides": [
+    {
+      "files": ["jest.config.js"],
+      "env": {
+        "node": true
+      }
+    },
+    {
+      "files": ["tests/**/*.js"],
+      "globals": {
+        "global": "readonly"
+      }
+    }
+  ]
 }

@@ -44,7 +44,7 @@ describe('Content Script', () => {
     document.querySelector = jest.fn(() => mockElement);
     document.querySelectorAll = jest.fn(() => [mockElement]);
     document.head = { appendChild: jest.fn() };
-    document.createElement = jest.fn((tag) => ({ 
+    document.createElement = jest.fn(() => ({ 
       textContent: '',
       id: '',
       style: {},
