@@ -304,7 +304,7 @@ async function handleType(params) {
       }
       return false;
     },
-    args: [params.selector, params.text, params.append]
+    args: [params.selector, params.text, params.append || false]
   });
   return { success: results[0]?.result || false };
 }
