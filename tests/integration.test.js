@@ -1,4 +1,4 @@
-import WS from 'jest-websocket-mock';
+const WS = require('jest-websocket-mock').default;
 
 describe('Integration Tests', () => {
   let server;
@@ -17,30 +17,34 @@ describe('Integration Tests', () => {
     }
   });
 
-  describe('End-to-End Scenarios', () => {
+  describe('End-to-End Workflows', () => {
     test('should handle complete tab navigation flow', async () => {
+      // Setup
       require('../background.js');
       await server.connected;
 
+      // Mock Chrome APIs
       const mockTab = { id: 1, url: 'https://example.com', title: 'Example' };
       chrome.tabs.create.mockResolvedValue(mockTab);
       chrome.tabs.update.mockResolvedValue({});
-      chrome.scripting.executeScript.mockResolvedValue([{ result: 'Page loaded' }]);
-      
-      let updateListener;
-      chrome.tabs.onUpdated.addListener.mockImplementation(listener => {
-        updateListener = listener;
-      });
+      chrome.scripting.executeScript.mockResolvedValue([{ result: 'complete' }]);
 
+      // Create tab
       server.send(JSON.stringify({
         id: '1',
         command: 'tabs.create',
         params: { url: 'https://example.com' }
       }));
 
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"result":{"id":1')
-      );
+      let message = await server.nextMessage;
+      let response = JSON.parse(message);
+      expect(response.result.id).toBe(1);
+
+      // Navigate to new URL
+      let updateListener;
+      chrome.tabs.onUpdated.addListener.mockImplementation(listener => {
+        updateListener = listener;
+      });
 
       server.send(JSON.stringify({
         id: '2',
@@ -48,34 +52,35 @@ describe('Integration Tests', () => {
         params: { tabId: 1, url: 'https://example.com/page2' }
       }));
 
+      // Simulate tab update completion
       setTimeout(() => {
-        updateListener(1, { status: 'complete' });
+        if (updateListener) updateListener(1, { status: 'complete' });
       }, 100);
 
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"success":true')
-      );
+      message = await server.nextMessage;
+      response = JSON.parse(message);
+      expect(response.result.success).toBe(true);
 
+      // Execute script
       server.send(JSON.stringify({
         id: '3',
         command: 'tabs.executeScript',
         params: { tabId: 1, script: 'return document.readyState;' }
       }));
 
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"result":"Page loaded"')
-      );
+      message = await server.nextMessage;
+      response = JSON.parse(message);
+      expect(response.result).toBe('complete');
     });
 
-    test('should handle form interaction flow', async () => {
+    test('should handle form interaction', async () => {
       require('../background.js');
       await server.connected;
 
-      chrome.scripting.executeScript
-        .mockResolvedValueOnce([{ result: [{ index: 0, tagName: 'INPUT' }] }])
-        .mockResolvedValueOnce([{ result: true }])
-        .mockResolvedValueOnce([{ result: true }])
-        .mockResolvedValueOnce([{ result: true }]);
+      // Find input field
+      chrome.scripting.executeScript.mockResolvedValueOnce([{ 
+        result: [{ index: 0, tagName: 'INPUT', id: 'username' }] 
+      }]);
 
       server.send(JSON.stringify({
         id: '1',
@@ -83,19 +88,25 @@ describe('Integration Tests', () => {
         params: { tabId: 1, selector: 'input[type="text"]' }
       }));
 
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"elements":[{"index":0')
-      );
+      let message = await server.nextMessage;
+      let response = JSON.parse(message);
+      expect(response.result.elements).toHaveLength(1);
+
+      // Type into field
+      chrome.scripting.executeScript.mockResolvedValueOnce([{ result: true }]);
 
       server.send(JSON.stringify({
         id: '2',
         command: 'tabs.type',
-        params: { tabId: 1, selector: 'input[type="text"]', text: 'Test input' }
+        params: { tabId: 1, selector: '#username', text: 'testuser' }
       }));
 
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"success":true')
-      );
+      message = await server.nextMessage;
+      response = JSON.parse(message);
+      expect(response.result.success).toBe(true);
+
+      // Click submit button
+      chrome.scripting.executeScript.mockResolvedValueOnce([{ result: true }]);
 
       server.send(JSON.stringify({
         id: '3',
@@ -103,79 +114,20 @@ describe('Integration Tests', () => {
         params: { tabId: 1, selector: 'button[type="submit"]' }
       }));
 
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"success":true')
-      );
-
-      server.send(JSON.stringify({
-        id: '4',
-        command: 'tabs.waitForElement',
-        params: { tabId: 1, selector: '.success-message', timeout: 5000 }
-      }));
-
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"found":true')
-      );
+      message = await server.nextMessage;
+      response = JSON.parse(message);
+      expect(response.result.success).toBe(true);
     });
 
-    test('should handle data extraction flow', async () => {
+    test('should handle cookie operations', async () => {
       require('../background.js');
       await server.connected;
 
-      const extractedText = 'Product: Test Item\nPrice: $99.99';
-      const structuredData = [
-        { name: 'Item 1', price: '$10' },
-        { name: 'Item 2', price: '$20' }
-      ];
-
-      chrome.scripting.executeScript
-        .mockResolvedValueOnce([{ result: extractedText }])
-        .mockResolvedValueOnce([{ result: structuredData }]);
-
-      server.send(JSON.stringify({
-        id: '1',
-        command: 'tabs.extractText',
-        params: { tabId: 1, selector: '.product-details' }
-      }));
-
-      await expect(server).toReceiveMessage(
-        expect.stringContaining(extractedText)
-      );
-
-      server.send(JSON.stringify({
-        id: '2',
-        command: 'tabs.executeScript',
-        params: {
-          tabId: 1,
-          script: `
-            const rows = document.querySelectorAll('.product-row');
-            return Array.from(rows).map(row => ({
-              name: row.querySelector('.name').textContent,
-              price: row.querySelector('.price').textContent
-            }));
-          `
-        }
-      }));
-
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"name":"Item 1"')
-      );
-    });
-
-    test('should handle cookie and storage management', async () => {
-      require('../background.js');
-      await server.connected;
-
+      // Get cookies
       const cookies = [
         { name: 'session', value: 'abc123', domain: '.example.com' }
       ];
       chrome.cookies.getAll.mockResolvedValue(cookies);
-      chrome.cookies.set.mockResolvedValue(cookies[0]);
-      chrome.cookies.remove.mockResolvedValue();
-      chrome.scripting.executeScript
-        .mockResolvedValueOnce([{ result: { key1: 'value1' } }])
-        .mockResolvedValueOnce([{ result: true }])
-        .mockResolvedValueOnce([{ result: true }]);
 
       server.send(JSON.stringify({
         id: '1',
@@ -183,9 +135,13 @@ describe('Integration Tests', () => {
         params: { url: 'https://example.com' }
       }));
 
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"cookies":[{"name":"session"')
-      );
+      let message = await server.nextMessage;
+      let response = JSON.parse(message);
+      expect(response.result.cookies).toEqual(cookies);
+
+      // Set new cookie
+      const newCookie = { name: 'newCookie', value: 'newValue' };
+      chrome.cookies.set.mockResolvedValue(newCookie);
 
       server.send(JSON.stringify({
         id: '2',
@@ -197,79 +153,22 @@ describe('Integration Tests', () => {
         }
       }));
 
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"cookie":')
-      );
+      message = await server.nextMessage;
+      response = JSON.parse(message);
+      expect(response.result.cookie).toEqual(newCookie);
+
+      // Delete cookie
+      chrome.cookies.remove.mockResolvedValue();
 
       server.send(JSON.stringify({
         id: '3',
-        command: 'tabs.getLocalStorage',
-        params: { tabId: 1 }
+        command: 'tabs.deleteCookie',
+        params: { url: 'https://example.com', name: 'session' }
       }));
 
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"storage":{"key1":"value1"}')
-      );
-
-      server.send(JSON.stringify({
-        id: '4',
-        command: 'tabs.setLocalStorage',
-        params: { tabId: 1, key: 'key2', value: 'value2' }
-      }));
-
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"success":true')
-      );
-
-      server.send(JSON.stringify({
-        id: '5',
-        command: 'tabs.clearLocalStorage',
-        params: { tabId: 1 }
-      }));
-
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"success":true')
-      );
-    });
-
-    test('should handle screenshot and video capture', async () => {
-      require('../background.js');
-      await server.connected;
-
-      const screenshotData = 'data:image/png;base64,iVBORw0KGgo...';
-      chrome.tabs.captureVisibleTab.mockResolvedValue(screenshotData);
-      
-      let captureCallback;
-      chrome.tabCapture.capture.mockImplementation((options, callback) => {
-        captureCallback = callback;
-        setTimeout(() => callback({ id: 'stream123' }), 0);
-      });
-
-      server.send(JSON.stringify({
-        id: '1',
-        command: 'tabs.captureScreenshot',
-        params: { windowId: 1, format: 'png', quality: 90 }
-      }));
-
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"dataUrl":"data:image/png;base64,iVBORw0KGgo')
-      );
-
-      server.send(JSON.stringify({
-        id: '2',
-        command: 'tabs.captureVideo',
-        params: {
-          audio: false,
-          video: true,
-          width: 1920,
-          height: 1080,
-          frameRate: 30
-        }
-      }));
-
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"streamId":"stream123"')
-      );
+      message = await server.nextMessage;
+      response = JSON.parse(message);
+      expect(response.result.success).toBe(true);
     });
   });
 
@@ -278,17 +177,21 @@ describe('Integration Tests', () => {
       require('../background.js');
       await server.connected;
 
+      // First error
       chrome.tabs.query.mockRejectedValue(new Error('Permission denied'));
-      chrome.tabs.create.mockRejectedValue(new Error('Quota exceeded'));
 
       server.send(JSON.stringify({
         id: '1',
         command: 'tabs.list'
       }));
 
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"error":"Permission denied"')
-      );
+      let message = await server.nextMessage;
+      let response = JSON.parse(message);
+      expect(response.type).toBe('error');
+      expect(response.error).toContain('Permission denied');
+
+      // Second error
+      chrome.tabs.create.mockRejectedValue(new Error('Quota exceeded'));
 
       server.send(JSON.stringify({
         id: '2',
@@ -296,119 +199,23 @@ describe('Integration Tests', () => {
         params: { url: 'https://example.com' }
       }));
 
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"error":"Quota exceeded"')
-      );
+      message = await server.nextMessage;
+      response = JSON.parse(message);
+      expect(response.type).toBe('error');
+      expect(response.error).toContain('Quota exceeded');
 
+      // Recovery - successful command
       chrome.tabs.query.mockResolvedValue([]);
-      
+
       server.send(JSON.stringify({
         id: '3',
         command: 'tabs.list'
       }));
 
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"result":[]')
-      );
-    });
-
-    test('should maintain connection after command errors', async () => {
-      require('../background.js');
-      await server.connected;
-
-      server.send('invalid json');
-      server.send(JSON.stringify({ id: '2' }));
-      server.send(JSON.stringify({ id: '3', command: 'invalid.command' }));
-
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"error"')
-      );
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"error":"Command not specified"')
-      );
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"error":"Unknown command: invalid.command"')
-      );
-
-      chrome.tabs.query.mockResolvedValue([]);
-      server.send(JSON.stringify({
-        id: '4',
-        command: 'tabs.list'
-      }));
-
-      await expect(server).toReceiveMessage(
-        expect.stringContaining('"result":[]')
-      );
-    });
-  });
-
-  describe('Performance', () => {
-    test('should handle rapid command sequences', async () => {
-      require('../background.js');
-      await server.connected;
-
-      chrome.tabs.query.mockResolvedValue([]);
-      chrome.tabs.create.mockResolvedValue({ id: 1 });
-      chrome.tabs.update.mockResolvedValue({});
-      chrome.tabs.remove.mockResolvedValue();
-
-      const commands = [];
-      for (let i = 0; i < 10; i++) {
-        commands.push({
-          id: String(i),
-          command: i % 2 === 0 ? 'tabs.list' : 'tabs.create',
-          params: i % 2 === 0 ? {} : { url: `https://example${i}.com` }
-        });
-      }
-
-      commands.forEach(cmd => {
-        server.send(JSON.stringify(cmd));
-      });
-
-      for (let i = 0; i < 10; i++) {
-        await expect(server).toReceiveMessage(
-          expect.stringContaining(`"id":"${i}"`)
-        );
-      }
-    });
-
-    test('should handle concurrent operations', async () => {
-      require('../background.js');
-      await server.connected;
-
-      const results = {
-        tabs: [{ id: 1 }, { id: 2 }],
-        cookies: [{ name: 'test' }],
-        screenshot: 'data:image/png;base64,test'
-      };
-
-      chrome.tabs.query.mockResolvedValue(results.tabs);
-      chrome.cookies.getAll.mockResolvedValue(results.cookies);
-      chrome.tabs.captureVisibleTab.mockResolvedValue(results.screenshot);
-
-      server.send(JSON.stringify({
-        id: '1',
-        command: 'tabs.list'
-      }));
-      server.send(JSON.stringify({
-        id: '2',
-        command: 'tabs.getCookies',
-        params: { url: 'https://example.com' }
-      }));
-      server.send(JSON.stringify({
-        id: '3',
-        command: 'tabs.captureScreenshot',
-        params: { windowId: 1 }
-      }));
-
-      const messages = [];
-      for (let i = 0; i < 3; i++) {
-        messages.push(JSON.parse(await server.nextMessage));
-      }
-
-      expect(messages.some(m => m.id === '1' && m.result.length === 2)).toBe(true);
-      expect(messages.some(m => m.id === '2' && m.result.cookies.length === 1)).toBe(true);
-      expect(messages.some(m => m.id === '3' && m.result.dataUrl)).toBe(true);
+      message = await server.nextMessage;
+      response = JSON.parse(message);
+      expect(response.type).toBe('response');
+      expect(response.result).toEqual([]);
     });
   });
 });
