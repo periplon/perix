@@ -444,12 +444,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // Notify popup when connection status changes
 function notifyConnectionStatus() {
-  chrome.runtime.sendMessage({
-    type: 'connectionStatusChanged',
-    connected: wsConnection?.readyState === WebSocket.OPEN
-  }).catch(() => {
+  try {
+    chrome.runtime.sendMessage({
+      type: 'connectionStatusChanged',
+      connected: wsConnection?.readyState === WebSocket.OPEN
+    });
+  } catch (error) {
     // Popup might not be open, ignore error
-  });
+  }
 }
 
 chrome.runtime.onInstalled.addListener(() => {
