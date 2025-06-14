@@ -10,7 +10,7 @@ Object.defineProperty(window, 'chrome', {
       onMessage: {
         addListener: jest.fn()
       },
-      sendMessage: jest.fn(),
+      sendMessage: jest.fn(() => Promise.resolve()),
       connect: jest.fn(() => ({
         onMessage: {
           addListener: jest.fn()

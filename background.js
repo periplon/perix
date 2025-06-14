@@ -44,6 +44,8 @@ function connectWebSocket() {
       clearInterval(wsReconnectInterval);
       wsReconnectInterval = null;
     }
+    
+    notifyConnectionStatus();
   };
 
   wsConnection.onmessage = async (event) => {
@@ -63,6 +65,7 @@ function connectWebSocket() {
   wsConnection.onclose = () => {
     console.log('WebSocket disconnected');
     scheduleReconnect();
+    notifyConnectionStatus();
   };
 }
 
@@ -98,6 +101,18 @@ function sendError(id, error) {
 }
 
 async function handleMessage(message) {
+  // Handle special message types
+  if (message.type === 'ack') {
+    console.log('Received acknowledgment from server');
+    return;
+  }
+  
+  if (message.type === 'pong') {
+    console.log('Received pong from server');
+    return;
+  }
+  
+  // Handle command messages
   const { id, command, params } = message;
   
   if (!command) {
@@ -409,6 +424,34 @@ async function waitForTabLoad(tabId) {
     };
     chrome.tabs.onUpdated.addListener(listener);
   });
+}
+
+// Handle messages from popup
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'getConnectionStatus') {
+    sendResponse({ connected: wsConnection?.readyState === WebSocket.OPEN });
+    return true;
+  }
+  
+  if (request.type === 'reconnect') {
+    if (wsConnection?.readyState !== WebSocket.OPEN) {
+      connectWebSocket();
+    }
+    sendResponse({ success: true });
+    return true;
+  }
+});
+
+// Notify popup when connection status changes
+function notifyConnectionStatus() {
+  try {
+    chrome.runtime.sendMessage({
+      type: 'connectionStatusChanged',
+      connected: wsConnection?.readyState === WebSocket.OPEN
+    });
+  } catch (error) {
+    // Popup might not be open, ignore error
+  }
 }
 
 chrome.runtime.onInstalled.addListener(() => {
