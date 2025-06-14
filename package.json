@@ -10,7 +10,7 @@
     "lint:fix": "eslint *.js tests/**/*.js --fix"
   },
   "devDependencies": {
-    "@types/chrome": "^0.0.254",
+    "@types/chrome": "^0.0.326",
     "@types/jest": "^29.5.11",
     "eslint": "^8.56.0",
     "jest": "^30.0.0",
