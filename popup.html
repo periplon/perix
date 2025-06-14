@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Browser Automation Controller</title>
+  <style>
+    body {
+      width: 350px;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+    }
+    h1 {
+      font-size: 18px;
+      margin: 0 0 16px 0;
+      color: #333;
+    }
+    .status {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .status-indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+    .status-indicator.connected {
+      background-color: #4CAF50;
+    }
+    .status-indicator.disconnected {
+      background-color: #f44336;
+    }
+    .info {
+      background-color: #f5f5f5;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+    .info-row {
+      margin-bottom: 4px;
+    }
+    .info-label {
+      font-weight: 500;
+      color: #666;
+    }
+    button {
+      background-color: #2196F3;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      width: 100%;
+      margin-bottom: 8px;
+    }
+    button:hover {
+      background-color: #1976D2;
+    }
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+    .tabs-list {
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      margin-top: 12px;
+    }
+    .tab-item {
+      padding: 8px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .tab-item:hover {
+      background-color: #f5f5f5;
+    }
+    .tab-item:last-child {
+      border-bottom: none;
+    }
+    .tab-title {
+      font-weight: 500;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tab-url {
+      color: #666;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  </style>
+</head>
+<body>
+  <h1>Browser Automation Controller</h1>
+  
+  <div class="status">
+    <div class="status-indicator" id="statusIndicator"></div>
+    <span id="statusText">Checking connection...</span>
+  </div>
+  
+  <div class="info">
+    <div class="info-row">
+      <span class="info-label">WebSocket URL:</span> <span id="wsUrl">ws://localhost:8765</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Version:</span> <span id="version">1.0.0</span>
+    </div>
+  </div>
+  
+  <button id="reconnectBtn" disabled>Reconnect</button>
+  <button id="refreshTabsBtn">Refresh Tabs</button>
+  
+  <div id="tabsList" class="tabs-list"></div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>
