@@ -13,8 +13,7 @@
     "webNavigation",
     "pageCapture",
     "tabCapture",
-    "desktopCapture",
-    "<all_urls>"
+    "desktopCapture"
   ],
   "host_permissions": [
     "<all_urls>"
