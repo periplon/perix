@@ -308,6 +308,17 @@ Error:
 }
 ```
 
+**tabs.deleteCookie** - Delete a cookie
+```json
+{
+  "command": "tabs.deleteCookie",
+  "params": {
+    "url": "https://example.com",
+    "name": "session_id"
+  }
+}
+```
+
 **tabs.getLocalStorage** - Get localStorage
 ```json
 {
@@ -327,6 +338,16 @@ Error:
     "tabId": 123,
     "key": "user_preferences",
     "value": "{\"theme\":\"dark\"}"
+  }
+}
+```
+
+**tabs.clearLocalStorage** - Clear all localStorage
+```json
+{
+  "command": "tabs.clearLocalStorage",
+  "params": {
+    "tabId": 123
   }
 }
 ```
