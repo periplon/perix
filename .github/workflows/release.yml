@@ -1,0 +1,102 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run tests
+      run: npm test
+
+    - name: Run tests with coverage
+      run: npm run test:coverage
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Extract version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+    - name: Update manifest version
+      run: |
+        node -e "
+        const fs = require('fs');
+        const manifest = require('./manifest.json');
+        manifest.version = '${{ steps.get_version.outputs.VERSION }}';
+        fs.writeFileSync('./manifest.json', JSON.stringify(manifest, null, 2));
+        "
+
+    - name: Create extension package
+      run: |
+        mkdir -p dist
+        zip -r dist/browser-automation-extension-${{ steps.get_version.outputs.VERSION }}.zip . \
+          -x "*.git*" \
+          -x "node_modules/*" \
+          -x "tests/*" \
+          -x "coverage/*" \
+          -x "dist/*" \
+          -x ".*" \
+          -x "package*.json" \
+          -x "jest.config.js" \
+          -x "*.md" \
+          -x ".github/*"
+
+    - name: Create source package
+      run: |
+        zip -r dist/browser-automation-extension-source-${{ steps.get_version.outputs.VERSION }}.zip . \
+          -x "*.git*" \
+          -x "node_modules/*" \
+          -x "coverage/*" \
+          -x "dist/*"
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/browser-automation-extension-${{ steps.get_version.outputs.VERSION }}.zip
+          dist/browser-automation-extension-source-${{ steps.get_version.outputs.VERSION }}.zip
+        body: |
+          ## Browser Automation Extension v${{ steps.get_version.outputs.VERSION }}
+          
+          ### Installation
+          1. Download `browser-automation-extension-${{ steps.get_version.outputs.VERSION }}.zip`
+          2. Extract the ZIP file
+          3. Open Chrome and navigate to `chrome://extensions/`
+          4. Enable "Developer mode"
+          5. Click "Load unpacked" and select the extracted folder
+          
+          ### Changes
+          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+        draft: false
+        prerelease: false
