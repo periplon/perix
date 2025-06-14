@@ -1,5 +1,8 @@
 # Browser Automation Controller
 
+[![Test](https://github.com/periplon/perix/actions/workflows/test.yml/badge.svg)](https://github.com/periplon/perix/actions/workflows/test.yml)
+[![Security](https://github.com/periplon/perix/actions/workflows/security.yml/badge.svg)](https://github.com/periplon/perix/actions/workflows/security.yml)
+
 A Chrome extension that enables WebSocket-based browser automation for MCP (Model Context Protocol) server integration. This extension provides comprehensive control over browser tabs, navigation, content extraction, and interaction capabilities.
 
 ## Features
@@ -395,6 +398,40 @@ To modify the extension:
 1. Edit the source files
 2. Reload the extension in Chrome
 3. Test changes with your WebSocket client
+
+### Testing
+
+```bash
+# Install dependencies
+npm install
+
+# Run tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# Run linter
+npm run lint
+```
+
+### CI/CD
+
+This project uses GitHub Actions for continuous integration:
+
+- **Test Workflow**: Runs on all pushes and pull requests
+  - Runs tests on Node.js 16.x, 18.x, and 20.x
+  - Runs linter and coverage checks
+  - Creates extension package artifacts
+  
+- **Security Workflow**: Runs security scans
+  - npm audit for dependency vulnerabilities
+  - CodeQL analysis for code security
+  - Dependency review on pull requests
+  
+- **Release Workflow**: Automated releases on version tags
+  - Creates extension packages
+  - Publishes GitHub releases
 
 ## License
 
