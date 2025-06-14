@@ -352,6 +352,39 @@ Error:
 }
 ```
 
+**tabs.getSessionStorage** - Get sessionStorage
+```json
+{
+  "command": "tabs.getSessionStorage",
+  "params": {
+    "tabId": 123,
+    "key": "temp_data"
+  }
+}
+```
+
+**tabs.setSessionStorage** - Set sessionStorage
+```json
+{
+  "command": "tabs.setSessionStorage",
+  "params": {
+    "tabId": 123,
+    "key": "temp_data",
+    "value": "{\"sessionId\":\"abc123\"}"
+  }
+}
+```
+
+**tabs.clearSessionStorage** - Clear all sessionStorage
+```json
+{
+  "command": "tabs.clearSessionStorage",
+  "params": {
+    "tabId": 123
+  }
+}
+```
+
 #### Utilities
 
 **tabs.waitForElement** - Wait for element to appear

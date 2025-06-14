@@ -26,7 +26,10 @@ const commandHandlers = {
   'tabs.deleteCookie': handleDeleteCookie,
   'tabs.getLocalStorage': handleGetLocalStorage,
   'tabs.setLocalStorage': handleSetLocalStorage,
-  'tabs.clearLocalStorage': handleClearLocalStorage
+  'tabs.clearLocalStorage': handleClearLocalStorage,
+  'tabs.getSessionStorage': handleGetSessionStorage,
+  'tabs.setSessionStorage': handleSetSessionStorage,
+  'tabs.clearSessionStorage': handleClearSessionStorage
 };
 
 function connectWebSocket() {
@@ -408,6 +411,43 @@ async function handleClearLocalStorage(params) {
     target: { tabId: params.tabId },
     func: () => {
       localStorage.clear();
+      return true;
+    }
+  });
+  return { success: results[0]?.result || false };
+}
+
+async function handleGetSessionStorage(params) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: params.tabId },
+    func: (key) => {
+      if (key) {
+        return { [key]: sessionStorage.getItem(key) };
+      }
+      return { ...sessionStorage };
+    },
+    args: [params.key]
+  });
+  return { storage: results[0]?.result };
+}
+
+async function handleSetSessionStorage(params) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: params.tabId },
+    func: (key, value) => {
+      sessionStorage.setItem(key, value);
+      return true;
+    },
+    args: [params.key, params.value]
+  });
+  return { success: results[0]?.result || false };
+}
+
+async function handleClearSessionStorage(params) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: params.tabId },
+    func: () => {
+      sessionStorage.clear();
       return true;
     }
   });
