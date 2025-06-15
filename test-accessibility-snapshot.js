@@ -42,7 +42,7 @@ async function testAccessibilitySnapshot() {
   // Test 4: Invalid tab ID
   console.log('\nTest 4: Invalid tab ID (error handling)');
   try {
-    const response4 = await sendCommand('tabs.getAccessibilitySnapshot', {
+    await sendCommand('tabs.getAccessibilitySnapshot', {
       tabId: 99999
     });
     console.log('✗ Should have failed with invalid tab ID');
