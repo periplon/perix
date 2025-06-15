@@ -385,6 +385,57 @@ Error:
 }
 ```
 
+#### Accessibility
+
+**tabs.getAccessibilitySnapshot** - Get accessibility tree snapshot
+```json
+{
+  "command": "tabs.getAccessibilitySnapshot",
+  "params": {
+    "tabId": 123,
+    "interestingOnly": true,
+    "root": null
+  }
+}
+```
+
+Returns a hierarchical representation of the accessibility tree. Each node contains:
+- `role`: The ARIA role of the element
+- `name`: The accessible name of the element
+- `children`: Array of child accessibility nodes
+- Additional properties like `level` (for headings), `checked` (for checkboxes), `expanded` (for expandable elements), etc.
+
+Example response:
+```json
+{
+  "snapshot": {
+    "role": "main",
+    "children": [
+      {
+        "role": "heading",
+        "name": "Welcome",
+        "level": 1
+      },
+      {
+        "role": "form",
+        "children": [
+          {
+            "role": "textbox",
+            "name": "Email",
+            "required": true,
+            "value": "user@example.com"
+          },
+          {
+            "role": "button",
+            "name": "Submit"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
 #### Utilities
 
 **tabs.waitForElement** - Wait for element to appear
