@@ -19,6 +19,7 @@ const commandHandlers = {
   'tabs.findElements': handleFindElements,
   'tabs.click': handleClick,
   'tabs.type': handleType,
+  'tabs.sendKey': handleSendKey,
   'tabs.scroll': handleScroll,
   'tabs.waitForElement': handleWaitForElement,
   'tabs.getCookies': handleGetCookies,
@@ -309,6 +310,67 @@ async function handleType(params) {
     args: [params.selector, params.text, params.append || false]
   });
   return { success: results[0]?.result || false };
+}
+
+async function handleSendKey(params) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: params.tabId },
+    func: (selector, key, modifiers) => {
+      const element = selector ? document.querySelector(selector) : document.activeElement;
+      if (!element) {
+        return { success: false, error: 'No element found' };
+      }
+      
+      // Focus the element
+      element.focus();
+      
+      // Create keyboard event options
+      const eventOptions = {
+        key: key,
+        code: key,
+        bubbles: true,
+        cancelable: true
+      };
+      
+      // Add modifiers if provided
+      if (modifiers) {
+        if (modifiers.includes('ctrl')) eventOptions.ctrlKey = true;
+        if (modifiers.includes('alt')) eventOptions.altKey = true;
+        if (modifiers.includes('shift')) eventOptions.shiftKey = true;
+        if (modifiers.includes('meta')) eventOptions.metaKey = true;
+      }
+      
+      // Dispatch keyboard events
+      const keydownEvent = new KeyboardEvent('keydown', eventOptions);
+      const keypressEvent = new KeyboardEvent('keypress', eventOptions);
+      const keyupEvent = new KeyboardEvent('keyup', eventOptions);
+      
+      element.dispatchEvent(keydownEvent);
+      
+      // Only dispatch keypress for printable characters
+      if (key.length === 1) {
+        element.dispatchEvent(keypressEvent);
+        
+        // For input/textarea elements, also update the value
+        if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA') {
+          const start = element.selectionStart;
+          const end = element.selectionEnd;
+          const value = element.value;
+          element.value = value.substring(0, start) + key + value.substring(end);
+          element.selectionStart = element.selectionEnd = start + 1;
+          
+          // Dispatch input event
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+      
+      element.dispatchEvent(keyupEvent);
+      
+      return { success: true };
+    },
+    args: [params.selector, params.key, params.modifiers]
+  });
+  return results[0]?.result || { success: false, error: 'Script execution failed' };
 }
 
 async function handleScroll(params) {
