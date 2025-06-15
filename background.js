@@ -326,21 +326,38 @@ async function handleScroll(params) {
 }
 
 async function handleWaitForElement(params) {
+  // Validate required parameters
+  if (!params.tabId) {
+    throw new Error('tabId is required');
+  }
+  if (!params.selector) {
+    throw new Error('selector is required');
+  }
+  
   const timeout = params.timeout || 10000;
   const checkInterval = 100;
   const startTime = Date.now();
   
   while (Date.now() - startTime < timeout) {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: params.tabId },
-      func: (selector) => {
-        return document.querySelector(selector) !== null;
-      },
-      args: [params.selector]
-    });
-    
-    if (results[0]?.result) {
-      return { found: true, elapsed: Date.now() - startTime };
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: params.tabId },
+        func: (selector) => {
+          return document.querySelector(selector) !== null;
+        },
+        args: [params.selector]
+      });
+      
+      // Check if script execution was successful and returned a valid result
+      // Only return true if we explicitly got a true result
+      if (results && results.length > 0 && results[0].result === true) {
+        return { found: true, elapsed: Date.now() - startTime };
+      }
+      // If result is explicitly false or any other value, continue waiting
+    } catch (error) {
+      // Script execution failed (tab closed, navigating, permissions, etc.)
+      console.warn(`Error checking element presence: ${error.message}`);
+      // Continue checking instead of failing immediately
     }
     
     await new Promise(resolve => setTimeout(resolve, checkInterval));
