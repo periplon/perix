@@ -1,7 +1,7 @@
 module.exports = {
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
-  testMatch: ['<rootDir>/tests/simple.test.js', '<rootDir>/tests/waitForElement.test.js', '<rootDir>/tests/getActionables.test.js', '<rootDir>/tests/accessibilitySnapshot.test.js', '<rootDir>/tests/scroll.test.js', '<rootDir>/tests/sendKey.test.js'],
+  testMatch: ['<rootDir>/tests/simple.test.js', '<rootDir>/tests/waitForElement.test.js', '<rootDir>/tests/getActionables.test.js', '<rootDir>/tests/accessibilitySnapshot.test.js', '<rootDir>/tests/scroll.test.js', '<rootDir>/tests/sendKey.test.js', '<rootDir>/tests/iframe-utils.test.js'],
   collectCoverageFrom: [
     '*.js',
     '!example-websocket-server.js',
