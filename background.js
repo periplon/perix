@@ -630,21 +630,6 @@ chrome.runtime.onConnect.addListener((port) => {
   }
 });
 
-// Send message to content script
-function sendToContentScript(tabId, message) {
-  const port = contentScriptPorts.get(tabId);
-  if (port) {
-    try {
-      port.postMessage(message);
-      return true;
-    } catch (error) {
-      console.error(`Error sending to content script (tab ${tabId}):`, error);
-      contentScriptPorts.delete(tabId);
-      return false;
-    }
-  }
-  return false;
-}
 
 // Handle messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
