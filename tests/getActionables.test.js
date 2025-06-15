@@ -18,13 +18,6 @@ describe('tabs.getActionables', () => {
       }]
     }]);
     
-    // Call the handler directly (since it's not exported, we test via the WebSocket handler)
-    const mockMessage = {
-      id: '123',
-      command: 'tabs.getActionables',
-      params: { tabId: 1 }
-    };
-    
     // Since handleGetActionables is not exported, we'll test the chrome API behavior
     const result = await chrome.scripting.executeScript({
       target: { tabId: 1 },
