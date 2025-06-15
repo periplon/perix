@@ -745,42 +745,12 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // Helper function for testing Chrome APIs from the console
-// Expose the function directly on the window object from the content script context
-window.testChromeAPI = function(apiCall) {
-  if (!port) {
-    console.error('Not connected to background script');
-    return;
-  }
-  
-  console.log('Sending test request to background script...');
-  
-  // Create a unique ID for this request
-  const requestId = 'test-' + Date.now();
-  
-  // Listen for the response
-  const responseHandler = (message) => {
-    if (message.type === 'testResponse' && message.id === requestId) {
-      port.onMessage.removeListener(responseHandler);
-      console.log('Test result:', message.result);
-      if (message.error) {
-        console.error('Test error:', message.error);
-      }
-    }
-  };
-  
-  port.onMessage.addListener(responseHandler);
-  
-  // Send the test request
-  port.postMessage({
-    type: 'test',
-    id: requestId,
-    apiCall: apiCall
-  });
-};
+// Instead of injecting scripts, we'll use a different approach
+// Users can dispatch the event directly from the console
+console.log('To test Chrome APIs from the console, use:');
+console.log('window.dispatchEvent(new CustomEvent("test-chrome-api", { detail: { apiCall: "tabs.query" } }))');
 
-console.log('testChromeAPI function is now available. Usage: testChromeAPI("tabs.query")');
-
-// Still listen for custom events for backward compatibility
+// Listen for the custom event from the page
 window.addEventListener('test-chrome-api', (event) => {
   if (!port) {
     console.error('Not connected to background script');
@@ -807,7 +777,7 @@ window.addEventListener('test-chrome-api', (event) => {
   
   // Send the test request
   port.postMessage({
-    type: 'testChromeAPI',
+    type: 'test',
     id: requestId,
     apiCall: event.detail.apiCall
   });
