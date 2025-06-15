@@ -1,16 +1,61 @@
 let port = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY = 1000;
 
 function connectToBackground() {
-  port = chrome.runtime.connect({ name: 'content-script' });
-  
-  port.onMessage.addListener((message) => {
-    handleBackgroundMessage(message);
-  });
-  
-  port.onDisconnect.addListener(() => {
-    console.log('Disconnected from background script');
-    setTimeout(connectToBackground, 1000);
-  });
+  try {
+    // Check if extension context is still valid
+    if (!chrome.runtime?.id) {
+      console.error('Extension context invalidated');
+      return;
+    }
+    
+    port = chrome.runtime.connect({ name: 'content-script' });
+    
+    port.onMessage.addListener((message) => {
+      try {
+        handleBackgroundMessage(message);
+      } catch (error) {
+        console.error('Error handling background message:', error);
+      }
+    });
+    
+    port.onDisconnect.addListener(() => {
+      port = null;
+      
+      // Check for specific errors
+      if (chrome.runtime.lastError) {
+        console.error('Connection error:', chrome.runtime.lastError.message);
+      } else {
+        console.log('Disconnected from background script');
+      }
+      
+      // Attempt reconnection with exponential backoff
+      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttempts++;
+        const delay = RECONNECT_DELAY * Math.pow(2, reconnectAttempts - 1);
+        console.log(`Attempting reconnection ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+        setTimeout(connectToBackground, delay);
+      } else {
+        console.error('Max reconnection attempts reached');
+      }
+    });
+    
+    // Reset reconnect attempts on successful connection
+    reconnectAttempts = 0;
+    console.log('Successfully connected to background script');
+    
+  } catch (error) {
+    console.error('Failed to connect to background script:', error);
+    
+    // Retry connection if attempts remaining
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      reconnectAttempts++;
+      const delay = RECONNECT_DELAY * Math.pow(2, reconnectAttempts - 1);
+      setTimeout(connectToBackground, delay);
+    }
+  }
 }
 
 function handleBackgroundMessage(message) {
@@ -42,19 +87,41 @@ function handleBackgroundMessage(message) {
 }
 
 function sendResponse(id, result) {
-  port.postMessage({
-    id,
-    type: 'response',
-    result
-  });
+  if (!port) {
+    console.error('Cannot send response: port is disconnected');
+    return;
+  }
+  
+  try {
+    port.postMessage({
+      id,
+      type: 'response',
+      result
+    });
+  } catch (error) {
+    console.error('Failed to send response:', error);
+    // Attempt reconnection
+    connectToBackground();
+  }
 }
 
 function sendError(id, error) {
-  port.postMessage({
-    id,
-    type: 'error',
-    error: error.toString()
-  });
+  if (!port) {
+    console.error('Cannot send error: port is disconnected');
+    return;
+  }
+  
+  try {
+    port.postMessage({
+      id,
+      type: 'error',
+      error: error.toString()
+    });
+  } catch (error) {
+    console.error('Failed to send error:', error);
+    // Attempt reconnection
+    connectToBackground();
+  }
 }
 
 function getElementInfo(params, id) {
@@ -342,10 +409,42 @@ function removeCSS(params, id) {
   }
 }
 
-window.addEventListener('load', () => {
-  connectToBackground();
-});
-
-if (document.readyState === 'complete') {
+// Initialize connection with proper checks
+function initializeConnection() {
+  // Check if we're in a valid context
+  if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
+    console.error('Extension context not available');
+    return;
+  }
+  
+  // Avoid duplicate connections
+  if (port) {
+    console.log('Connection already established');
+    return;
+  }
+  
   connectToBackground();
 }
+
+// Initialize on different page states
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializeConnection);
+} else {
+  // DOM is already loaded
+  initializeConnection();
+}
+
+// Also listen for window load as a fallback
+window.addEventListener('load', () => {
+  if (!port) {
+    initializeConnection();
+  }
+});
+
+// Handle page visibility changes (useful for tabs that were in background)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !port) {
+    console.log('Page became visible, attempting to connect');
+    initializeConnection();
+  }
+});
