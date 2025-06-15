@@ -700,7 +700,15 @@ function getAccessibilitySnapshot(params, id) {
 function initializeConnection() {
   // Check if we're in a valid context
   if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
-    console.error('Extension context not available');
+    console.warn('Extension context not available - might be on a restricted page (chrome://, chrome-extension://, etc.)');
+    return;
+  }
+  
+  // Additional check for restricted URLs
+  const restrictedProtocols = ['chrome:', 'chrome-extension:', 'edge:', 'about:', 'data:', 'file:'];
+  const currentProtocol = window.location.protocol;
+  if (restrictedProtocols.includes(currentProtocol)) {
+    console.warn(`Content script cannot run on ${currentProtocol} pages`);
     return;
   }
   
