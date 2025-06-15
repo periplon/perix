@@ -544,24 +544,49 @@ async function handleGetActionables(params) {
         if (element.id) {
           selector = `#${element.id}`;
         } else if (element.className) {
-          const classes = element.className.split(' ').filter(c => c).join('.');
+          // Escape CSS special characters in class names
+          const escapeClassName = (className) => {
+            return className.replace(/([!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~])/g, '\\$1');
+          };
+          
+          const classes = element.className.split(' ')
+            .filter(c => c)
+            .map(escapeClassName)
+            .join('.');
           selector = `${element.tagName.toLowerCase()}.${classes}`;
+          
           // Make selector more specific if needed
-          const matches = document.querySelectorAll(selector);
-          if (matches.length > 1) {
-            // Add parent context
-            let parent = element.parentElement;
-            while (parent && matches.length > 1) {
-              if (parent.id) {
-                selector = `#${parent.id} ${selector}`;
-                break;
-              } else if (parent.className) {
-                const parentClasses = parent.className.split(' ').filter(c => c).join('.');
-                selector = `${parent.tagName.toLowerCase()}.${parentClasses} ${selector}`;
-                if (document.querySelectorAll(selector).length === 1) break;
+          try {
+            const matches = document.querySelectorAll(selector);
+            if (matches.length > 1) {
+              // Add parent context
+              let parent = element.parentElement;
+              while (parent && matches.length > 1) {
+                if (parent.id) {
+                  selector = `#${parent.id} ${selector}`;
+                  break;
+                } else if (parent.className) {
+                  const parentClasses = parent.className.split(' ')
+                    .filter(c => c)
+                    .map(escapeClassName)
+                    .join('.');
+                  selector = `${parent.tagName.toLowerCase()}.${parentClasses} ${selector}`;
+                  try {
+                    if (document.querySelectorAll(selector).length === 1) break;
+                  } catch (e) {
+                    // If selector is still invalid, continue to next parent
+                  }
+                }
+                parent = parent.parentElement;
               }
-              parent = parent.parentElement;
             }
+          } catch (e) {
+            // If selector is invalid, fallback to a simpler approach
+            // Use data attribute or index-based selector
+            const parent = element.parentElement;
+            const siblings = Array.from(parent.children);
+            const index = siblings.indexOf(element) + 1;
+            selector = `${parent.tagName.toLowerCase()} > ${element.tagName.toLowerCase()}:nth-child(${index})`;
           }
         } else {
           // Fallback to nth-child selector
