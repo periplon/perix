@@ -1,4 +1,4 @@
-describe('test.getAccessibilitySnapshot', () => {
+describe('tabs.getAccessibilitySnapshot', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
