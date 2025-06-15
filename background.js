@@ -314,16 +314,44 @@ async function handleType(params) {
 async function handleScroll(params) {
   const results = await chrome.scripting.executeScript({
     target: { tabId: params.tabId },
-    func: (x, y, behavior) => {
-      window.scrollTo({
-        left: x || 0,
-        top: y || 0,
-        behavior: behavior || 'smooth'
-      });
-      return { x: window.scrollX, y: window.scrollY };
+    func: (x, y, selector, behavior) => {
+      try {
+        // If selector is provided, scroll to that element
+        if (selector) {
+          const element = document.querySelector(selector);
+          if (!element) {
+            throw new Error(`Element not found: ${selector}`);
+          }
+          element.scrollIntoView({
+            behavior: behavior || 'smooth',
+            block: 'center',
+            inline: 'center'
+          });
+        } else {
+          // Otherwise use x,y coordinates
+          window.scrollTo({
+            left: x !== undefined ? x : window.scrollX,
+            top: y !== undefined ? y : window.scrollY,
+            behavior: behavior || 'smooth'
+          });
+        }
+        
+        // Return the new scroll position
+        return { 
+          x: window.scrollX || window.pageXOffset || 0, 
+          y: window.scrollY || window.pageYOffset || 0 
+        };
+      } catch (error) {
+        throw new Error(`Scroll failed: ${error.message}`);
+      }
     },
-    args: [params.x, params.y, params.behavior]
+    args: [params.x, params.y, params.selector, params.behavior]
   });
+  
+  if (results[0]?.error) {
+    throw new Error(results[0].error);
+  }
+  
   return results[0]?.result;
 }
 
