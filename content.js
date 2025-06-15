@@ -59,8 +59,15 @@ function connectToBackground() {
 }
 
 function handleBackgroundMessage(message) {
-  const { command, params, id } = message;
+  const { command, params, id, type } = message;
   
+  // Handle new message format for accessibility snapshot
+  if (type === 'getAccessibilitySnapshot') {
+    getAccessibilitySnapshot(params, id);
+    return;
+  }
+  
+  // Handle existing command format
   switch (command) {
   case 'getElementInfo':
     getElementInfo(params, id);
@@ -406,6 +413,286 @@ function removeCSS(params, id) {
     }
   } catch (error) {
     sendError(id, error.message);
+  }
+}
+
+function getAccessibilitySnapshot(params, id) {
+  try {
+    const { interestingOnly = true, root = null } = params;
+    
+    // Helper functions (same as in background.js but running in page context)
+    const isVisible = (element) => {
+      if (!element) return false;
+      
+      const style = window.getComputedStyle(element);
+      if (style.display === 'none' || style.visibility === 'hidden') return false;
+      if (style.opacity === '0') return false;
+      
+      const rect = element.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+    
+    const getAccessibleName = (element) => {
+      // Check aria-label first
+      const ariaLabel = element.getAttribute('aria-label');
+      if (ariaLabel) return ariaLabel.trim();
+      
+      // Check aria-labelledby
+      const labelledBy = element.getAttribute('aria-labelledby');
+      if (labelledBy) {
+        const labelElement = document.getElementById(labelledBy);
+        if (labelElement) return labelElement.textContent.trim();
+      }
+      
+      // Check for label element (for form controls)
+      if (element.id) {
+        const label = document.querySelector(`label[for="${element.id}"]`);
+        if (label) return label.textContent.trim();
+      }
+      
+      // Check alt text for images
+      if (element.tagName === 'IMG' && element.alt) {
+        return element.alt.trim();
+      }
+      
+      // Check placeholder
+      if (element.placeholder) return element.placeholder.trim();
+      
+      // Check title
+      if (element.title) return element.title.trim();
+      
+      // Use text content as fallback
+      return element.textContent?.trim() || '';
+    };
+    
+    const getRole = (element) => {
+      // Check explicit role
+      const explicitRole = element.getAttribute('role');
+      if (explicitRole) return explicitRole;
+      
+      // Map HTML elements to implicit roles
+      const tagName = element.tagName.toLowerCase();
+      const type = element.type?.toLowerCase();
+      
+      const implicitRoles = {
+        'a': element.href ? 'link' : null,
+        'article': 'article',
+        'aside': 'complementary',
+        'button': 'button',
+        'datalist': 'listbox',
+        'dd': 'definition',
+        'details': 'group',
+        'dialog': 'dialog',
+        'dt': 'term',
+        'fieldset': 'group',
+        'figure': 'figure',
+        'footer': 'contentinfo',
+        'form': 'form',
+        'h1': 'heading',
+        'h2': 'heading',
+        'h3': 'heading',
+        'h4': 'heading',
+        'h5': 'heading',
+        'h6': 'heading',
+        'header': 'banner',
+        'hr': 'separator',
+        'img': element.alt !== '' ? 'img' : 'presentation',
+        'input': {
+          'button': 'button',
+          'checkbox': 'checkbox',
+          'email': 'textbox',
+          'image': 'button',
+          'number': 'spinbutton',
+          'password': 'textbox',
+          'radio': 'radio',
+          'range': 'slider',
+          'reset': 'button',
+          'search': 'searchbox',
+          'submit': 'button',
+          'tel': 'textbox',
+          'text': 'textbox',
+          'url': 'textbox'
+        }[type] || 'textbox',
+        'li': 'listitem',
+        'main': 'main',
+        'menu': 'list',
+        'nav': 'navigation',
+        'ol': 'list',
+        'option': 'option',
+        'output': 'status',
+        'progress': 'progressbar',
+        'section': 'region',
+        'select': 'combobox',
+        'summary': 'button',
+        'table': 'table',
+        'tbody': 'rowgroup',
+        'td': 'cell',
+        'textarea': 'textbox',
+        'tfoot': 'rowgroup',
+        'th': 'columnheader',
+        'thead': 'rowgroup',
+        'tr': 'row',
+        'ul': 'list'
+      };
+      
+      return implicitRoles[tagName] || null;
+    };
+    
+    const getProperties = (element) => {
+      const properties = {};
+      
+      // Get various ARIA properties
+      const ariaProps = [
+        'aria-checked',
+        'aria-current',
+        'aria-disabled',
+        'aria-expanded',
+        'aria-haspopup',
+        'aria-hidden',
+        'aria-invalid',
+        'aria-pressed',
+        'aria-readonly',
+        'aria-required',
+        'aria-selected'
+      ];
+      
+      ariaProps.forEach(prop => {
+        const value = element.getAttribute(prop);
+        if (value !== null) {
+          const propName = prop.replace('aria-', '');
+          // Convert string boolean values to actual booleans
+          if (value === 'true') properties[propName] = true;
+          else if (value === 'false') properties[propName] = false;
+          else properties[propName] = value;
+        }
+      });
+      
+      // Add properties based on element state
+      if (element.disabled) properties.disabled = true;
+      if (element.readOnly) properties.readonly = true;
+      if (element.required) properties.required = true;
+      
+      // For form elements, add value info
+      if (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA' || element.tagName === 'SELECT') {
+        if (element.type === 'checkbox' || element.type === 'radio') {
+          properties.checked = element.checked;
+        }
+        if (element.value && element.type !== 'password') {
+          properties.value = element.value;
+        }
+      }
+      
+      // Add level for headings
+      const headingMatch = element.tagName.match(/^H(\d)$/);
+      if (headingMatch) {
+        properties.level = parseInt(headingMatch[1]);
+      }
+      
+      return properties;
+    };
+    
+    const buildAccessibilityNode = (element, options = {}) => {
+      if (!element || element.nodeType !== Node.ELEMENT_NODE) return null;
+      
+      const role = getRole(element);
+      const name = getAccessibleName(element);
+      const properties = getProperties(element);
+      
+      // Skip hidden elements
+      if (properties.hidden === true || element.getAttribute('aria-hidden') === 'true') {
+        return null;
+      }
+      
+      // Skip non-visible elements if required
+      if (options.interestingOnly && !isVisible(element)) {
+        return null;
+      }
+      
+      const node = { role };
+      
+      // Add name if present
+      if (name) node.name = name;
+      
+      // Add properties if any
+      if (Object.keys(properties).length > 0) {
+        Object.assign(node, properties);
+      }
+      
+      // Process children
+      const children = [];
+      for (const child of element.children) {
+        const childNode = buildAccessibilityNode(child, options);
+        if (childNode) {
+          children.push(childNode);
+        }
+      }
+      
+      // Also check for text nodes
+      for (const child of element.childNodes) {
+        if (child.nodeType === Node.TEXT_NODE) {
+          const text = child.textContent.trim();
+          if (text && !name) {
+            // If the element has no name but has direct text content,
+            // add it as the name (unless it has children with roles)
+            if (children.length === 0 || !children.some(c => c.role)) {
+              node.name = text;
+            }
+          }
+        }
+      }
+      
+      // Add children if any
+      if (children.length > 0) {
+        node.children = children;
+      }
+      
+      // Filter out uninteresting nodes if requested
+      if (options.interestingOnly) {
+        // Keep nodes that have a role, name, or properties
+        const hasInterestingContent = role || name || Object.keys(properties).length > 0;
+        // Also keep nodes with interesting children
+        const hasInterestingChildren = children.length > 0;
+        
+        if (!hasInterestingContent && !hasInterestingChildren) {
+          // If this node has children but is not interesting itself,
+          // promote its children
+          return children.length === 1 ? children[0] : (children.length > 0 ? { children } : null);
+        }
+      }
+      
+      return node;
+    };
+    
+    // Start from root element or document body
+    const rootElement = root ? 
+      document.querySelector(root) : 
+      document.body;
+      
+    if (!rootElement) {
+      throw new Error('Root element not found');
+    }
+    
+    const snapshot = buildAccessibilityNode(rootElement, {
+      interestingOnly
+    });
+    
+    // Send response back to background script
+    if (port) {
+      port.postMessage({
+        type: 'accessibilitySnapshot',
+        id,
+        snapshot
+      });
+    }
+  } catch (error) {
+    // Send error back to background script
+    if (port) {
+      port.postMessage({
+        type: 'accessibilitySnapshot',
+        id,
+        error: error.message
+      });
+    }
   }
 }
 
