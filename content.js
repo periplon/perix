@@ -745,7 +745,22 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // Helper function for testing Chrome APIs from the console
-window.testChromeAPI = function(apiCall) {
+// We need to inject this into the page context to make it accessible from the console
+const script = document.createElement('script');
+script.textContent = `
+  window.testChromeAPI = function(apiCall) {
+    // Send a custom event to the content script
+    window.dispatchEvent(new CustomEvent('test-chrome-api', {
+      detail: { apiCall: apiCall }
+    }));
+  };
+  console.log('testChromeAPI function is now available. Usage: testChromeAPI("tabs.query")');
+`;
+document.documentElement.appendChild(script);
+script.remove();
+
+// Listen for the custom event from the page
+window.addEventListener('test-chrome-api', (event) => {
   if (!port) {
     console.error('Not connected to background script');
     return;
@@ -773,11 +788,11 @@ window.testChromeAPI = function(apiCall) {
   port.postMessage({
     type: 'testChromeAPI',
     id: requestId,
-    apiCall: apiCall
+    apiCall: event.detail.apiCall
   });
   
   // Remove listener after timeout
   setTimeout(() => {
     port.onMessage.removeListener(responseHandler);
   }, 5000);
-};
+});
