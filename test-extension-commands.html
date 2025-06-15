@@ -94,6 +94,28 @@ chrome.runtime.sendMessage({
   command: 'tabs.getAccessibilitySnapshot',
   params: { tabId: TAB_ID }
 }, response => console.log('Accessibility snapshot:', response));</pre>
+        
+        <h3>Test Send Key Command:</h3>
+        <pre>// Send a single key to the focused element
+chrome.runtime.sendMessage({
+  type: 'command',
+  command: 'tabs.sendKey',
+  params: { tabId: TAB_ID, key: 'a' }
+}, response => console.log('SendKey result:', response));
+
+// Send key to specific element
+chrome.runtime.sendMessage({
+  type: 'command',
+  command: 'tabs.sendKey',
+  params: { tabId: TAB_ID, selector: '#test-input', key: 'Enter' }
+}, response => console.log('SendKey result:', response));
+
+// Send key with modifiers (Ctrl+A to select all)
+chrome.runtime.sendMessage({
+  type: 'command',
+  command: 'tabs.sendKey',
+  params: { tabId: TAB_ID, selector: '#test-input', key: 'a', modifiers: ['ctrl'] }
+}, response => console.log('SendKey result:', response));</pre>
     </div>
     
     <div class="test-section">
