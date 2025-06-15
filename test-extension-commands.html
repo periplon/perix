@@ -45,32 +45,38 @@
     <h1>Extension Command Tester</h1>
     
     <div class="test-section">
-        <h2>Test Accessibility Snapshot</h2>
-        <p>Open the browser console (F12) and run these commands to test the accessibility snapshot:</p>
+        <h2>Test Chrome Extension APIs</h2>
+        <p><strong>Important:</strong> Chrome APIs like <code>chrome.tabs</code> are only available in the extension's background script context, not in regular web pages.</p>
         
-        <h3>1. Get current tab ID:</h3>
-        <pre>chrome.tabs.query({active: true, currentWindow: true}, (tabs) => console.log('Current tab ID:', tabs[0].id));</pre>
+        <h3>Method 1: Using the Extension's Background Console</h3>
+        <ol>
+            <li>Go to <code>chrome://extensions/</code></li>
+            <li>Find "Browser Automation Extension"</li>
+            <li>Click on "service worker" or "background page" link</li>
+            <li>In the console that opens, run:</li>
+        </ol>
+        <pre>chrome.tabs.query({active: true, currentWindow: true}, (tabs) => console.log('Current tab:', tabs[0]));</pre>
         
-        <h3>2. Test basic accessibility snapshot:</h3>
-        <pre>// Replace TAB_ID with your actual tab ID
+        <h3>Method 2: Using the Helper Function (from any web page)</h3>
+        <p>The extension now includes a helper function that lets you test Chrome APIs from any web page's console:</p>
+        <pre>// This will send the request to the background script and show the result
+testChromeAPI('tabs.query');</pre>
+        
+        <h3>Common Chrome API Tests:</h3>
+        <pre>// Test tab operations (run in background console)
+chrome.tabs.query({}, (tabs) => console.log('All tabs:', tabs));
+chrome.tabs.create({url: 'https://example.com'}, (tab) => console.log('Created tab:', tab));
+
+// Test from web page console using helper
+testChromeAPI('tabs.query');  // Gets current tab info</pre>
+        
+        <h3>Test Accessibility Snapshot:</h3>
+        <pre>// From background console (replace TAB_ID with actual ID)
 chrome.runtime.sendMessage({
   type: 'command',
   command: 'tabs.getAccessibilitySnapshot',
   params: { tabId: TAB_ID }
 }, response => console.log('Accessibility snapshot:', response));</pre>
-        
-        <h3>3. Direct script execution test:</h3>
-        <pre>chrome.scripting.executeScript({
-  target: { tabId: TAB_ID },
-  func: () => {
-    // Test if we can access the page
-    return {
-      title: document.title,
-      hasBody: !!document.body,
-      elementsCount: document.querySelectorAll('*').length
-    };
-  }
-}, results => console.log('Page info:', results[0].result));</pre>
     </div>
     
     <div class="test-section">
