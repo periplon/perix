@@ -103,8 +103,22 @@
     </footer>
     
     <div id="result">
-        <h3>Test Results</h3>
-        <p>Open the browser console and run the extension's accessibility snapshot function to see results here.</p>
+        <h3>Test Instructions</h3>
+        <p><strong>Important:</strong> Chrome APIs are only available in the extension's background script, not in web pages.</p>
+        
+        <h4>Method 1: Using Background Console</h4>
+        <ol>
+            <li>Go to <code>chrome://extensions/</code></li>
+            <li>Find "Browser Automation Extension"</li>
+            <li>Click "service worker" link to open background console</li>
+            <li>Get the current tab ID: <code>chrome.tabs.query({active: true, currentWindow: true}, tabs => console.log('Tab ID:', tabs[0].id))</code></li>
+            <li>Run accessibility snapshot: <code>chrome.runtime.sendMessage({type: 'command', command: 'tabs.getAccessibilitySnapshot', params: {tabId: YOUR_TAB_ID}}, response => console.log(response))</code></li>
+        </ol>
+        
+        <h4>Method 2: Using Helper Function</h4>
+        <p>From this page's console, simply run:</p>
+        <pre>testChromeAPI('tabs.query')</pre>
+        <p>This will show you the current tab info through the extension's background script.</p>
     </div>
     
     <script>

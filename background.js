@@ -947,8 +947,29 @@ chrome.runtime.onConnect.addListener((port) => {
       console.log(`Content script connected from tab ${tabId}`);
       
       // Handle messages from content script
-      port.onMessage.addListener((message) => {
+      port.onMessage.addListener(async (message) => {
         console.log(`Message from content script (tab ${tabId}):`, message);
+        
+        // Handle test Chrome API requests
+        if (message.type === 'testChromeAPI') {
+          try {
+            // Execute the API call
+            const result = await chrome.tabs.query({active: true, currentWindow: true});
+            port.postMessage({
+              type: 'testResponse',
+              id: message.id,
+              result: result
+            });
+          } catch (error) {
+            port.postMessage({
+              type: 'testResponse',
+              id: message.id,
+              error: error.message
+            });
+          }
+          return;
+        }
+        
         // Forward responses back through WebSocket if needed
         if (message.type === 'response' || message.type === 'error') {
           sendMessage(message);
@@ -1006,4 +1027,6 @@ chrome.runtime.onStartup.addListener(() => {
   connectWebSocket();
 });
 
+// Initialize WebSocket connection when script loads
+// In test environment, this will use the mocked WebSocket
 connectWebSocket();

@@ -743,3 +743,41 @@ document.addEventListener('visibilitychange', () => {
     initializeConnection();
   }
 });
+
+// Helper function for testing Chrome APIs from the console
+window.testChromeAPI = function(apiCall) {
+  if (!port) {
+    console.error('Not connected to background script');
+    return;
+  }
+  
+  console.log('Sending test request to background script...');
+  
+  // Create a unique ID for this request
+  const requestId = 'test-' + Date.now();
+  
+  // Listen for the response
+  const responseHandler = (message) => {
+    if (message.type === 'testResponse' && message.id === requestId) {
+      port.onMessage.removeListener(responseHandler);
+      console.log('Test result:', message.result);
+      if (message.error) {
+        console.error('Test error:', message.error);
+      }
+    }
+  };
+  
+  port.onMessage.addListener(responseHandler);
+  
+  // Send the test request
+  port.postMessage({
+    type: 'testChromeAPI',
+    id: requestId,
+    apiCall: apiCall
+  });
+  
+  // Remove listener after timeout
+  setTimeout(() => {
+    port.onMessage.removeListener(responseHandler);
+  }, 5000);
+};
