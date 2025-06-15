@@ -20,6 +20,9 @@ describe('tabs.sendKey', () => {
   test('should send key to focused element', async () => {
     require('../background.js');
     await server.connected;
+    
+    // Skip the initial connected message
+    await server.nextMessage;
 
     // Mock Chrome API
     chrome.scripting.executeScript.mockResolvedValueOnce([{ 
@@ -35,7 +38,7 @@ describe('tabs.sendKey', () => {
     const message = await server.nextMessage;
     const response = JSON.parse(message);
     
-    expect(response.result.success).toBe(true);
+    expect(response.result).toEqual({ success: true });
     expect(chrome.scripting.executeScript).toHaveBeenCalledWith({
       target: { tabId: 1 },
       func: expect.any(Function),
@@ -46,6 +49,9 @@ describe('tabs.sendKey', () => {
   test('should send key to specific element', async () => {
     require('../background.js');
     await server.connected;
+    
+    // Skip the initial connected message
+    await server.nextMessage;
 
     chrome.scripting.executeScript.mockResolvedValueOnce([{ 
       result: { success: true }
@@ -64,7 +70,7 @@ describe('tabs.sendKey', () => {
     const message = await server.nextMessage;
     const response = JSON.parse(message);
     
-    expect(response.result.success).toBe(true);
+    expect(response.result).toEqual({ success: true });
     expect(chrome.scripting.executeScript).toHaveBeenCalledWith({
       target: { tabId: 1 },
       func: expect.any(Function),
@@ -75,6 +81,9 @@ describe('tabs.sendKey', () => {
   test('should send key with modifiers', async () => {
     require('../background.js');
     await server.connected;
+    
+    // Skip the initial connected message
+    await server.nextMessage;
 
     chrome.scripting.executeScript.mockResolvedValueOnce([{ 
       result: { success: true }
@@ -93,7 +102,7 @@ describe('tabs.sendKey', () => {
     const message = await server.nextMessage;
     const response = JSON.parse(message);
     
-    expect(response.result.success).toBe(true);
+    expect(response.result).toEqual({ success: true });
     expect(chrome.scripting.executeScript).toHaveBeenCalledWith({
       target: { tabId: 1 },
       func: expect.any(Function),
@@ -104,6 +113,9 @@ describe('tabs.sendKey', () => {
   test('should handle element not found', async () => {
     require('../background.js');
     await server.connected;
+    
+    // Skip the initial connected message
+    await server.nextMessage;
 
     chrome.scripting.executeScript.mockResolvedValueOnce([{ 
       result: { success: false, error: 'No element found' }
@@ -122,13 +134,15 @@ describe('tabs.sendKey', () => {
     const message = await server.nextMessage;
     const response = JSON.parse(message);
     
-    expect(response.result.success).toBe(false);
-    expect(response.result.error).toBe('No element found');
+    expect(response.result).toEqual({ success: false, error: 'No element found' });
   });
 
   test('should handle script execution failure', async () => {
     require('../background.js');
     await server.connected;
+    
+    // Skip the initial connected message
+    await server.nextMessage;
 
     chrome.scripting.executeScript.mockResolvedValueOnce([null]);
 
@@ -144,7 +158,6 @@ describe('tabs.sendKey', () => {
     const message = await server.nextMessage;
     const response = JSON.parse(message);
     
-    expect(response.result.success).toBe(false);
-    expect(response.result.error).toBe('Script execution failed');
+    expect(response.result).toEqual({ success: false, error: 'Script execution failed' });
   });
 });
