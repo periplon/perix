@@ -953,8 +953,42 @@ chrome.runtime.onConnect.addListener((port) => {
         // Handle test Chrome API requests
         if (message.type === 'testChromeAPI') {
           try {
-            // Execute the API call
-            const result = await chrome.tabs.query({active: true, currentWindow: true});
+            // Parse and execute the API call dynamically
+            const apiCall = message.apiCall;
+            let result;
+            
+            // Parse the API call string (e.g., "tabs.query" or "tabs.query({active: true})")
+            const match = apiCall.match(/^(\w+)\.(\w+)(?:\((.*)\))?$/);
+            if (!match) {
+              throw new Error('Invalid API call format. Use format like "tabs.query" or "tabs.query({active: true})"');
+            }
+            
+            const [, namespace, method, argsStr] = match;
+            
+            // Check if the namespace exists in chrome API
+            if (!chrome[namespace]) {
+              throw new Error(`Chrome API namespace "${namespace}" not found`);
+            }
+            
+            // Check if the method exists
+            if (!chrome[namespace][method]) {
+              throw new Error(`Method "${method}" not found in chrome.${namespace}`);
+            }
+            
+            // Parse arguments if provided
+            let args = [];
+            if (argsStr) {
+              try {
+                // Use Function constructor to safely evaluate the arguments
+                args = new Function('return [' + argsStr + ']')();
+              } catch (e) {
+                throw new Error(`Failed to parse arguments: ${e.message}`);
+              }
+            }
+            
+            // Execute the Chrome API call
+            result = await chrome[namespace][method](...args);
+            
             port.postMessage({
               type: 'testResponse',
               id: message.id,
