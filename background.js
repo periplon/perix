@@ -29,7 +29,8 @@ const commandHandlers = {
   'tabs.clearLocalStorage': handleClearLocalStorage,
   'tabs.getSessionStorage': handleGetSessionStorage,
   'tabs.setSessionStorage': handleSetSessionStorage,
-  'tabs.clearSessionStorage': handleClearSessionStorage
+  'tabs.clearSessionStorage': handleClearSessionStorage,
+  'tabs.getActionables': handleGetActionables
 };
 
 function connectWebSocket() {
@@ -469,6 +470,120 @@ async function handleClearSessionStorage(params) {
     }
   });
   return { success: results[0]?.result || false };
+}
+
+async function handleGetActionables(params) {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: params.tabId },
+    func: () => {
+      const actionables = [];
+      let labelNumber = 0;
+
+      // Define interactive element selectors
+      const interactiveSelectors = [
+        'a[href]',
+        'button',
+        'input:not([type="hidden"])',
+        'select',
+        'textarea',
+        '[role="button"]',
+        '[role="link"]',
+        '[role="checkbox"]',
+        '[role="radio"]',
+        '[role="switch"]',
+        '[role="tab"]',
+        '[role="menuitem"]',
+        '[role="option"]',
+        '[onclick]',
+        '[tabindex]:not([tabindex="-1"])',
+        '[contenteditable="true"]'
+      ];
+
+      // Query all interactive elements
+      const elements = document.querySelectorAll(interactiveSelectors.join(','));
+      
+      // Process each element
+      elements.forEach(element => {
+        // Check if element is visible
+        const rect = element.getBoundingClientRect();
+        const isVisible = rect.width > 0 && rect.height > 0 &&
+                         rect.top < window.innerHeight && rect.bottom > 0 &&
+                         rect.left < window.innerWidth && rect.right > 0;
+        
+        if (!isVisible) return;
+        
+        // Check if element is interactive (not disabled)
+        if (element.disabled || element.getAttribute('aria-disabled') === 'true') return;
+        
+        // Determine element type
+        let type = element.tagName.toLowerCase();
+        if (type === 'input') {
+          type = `input[type="${element.type || 'text'}"]`;
+        } else if (element.getAttribute('role')) {
+          type = `${type}[role="${element.getAttribute('role')}"]`;
+        }
+        
+        // Generate description
+        let description = '';
+        if (element.textContent && element.textContent.trim()) {
+          description = element.textContent.trim().substring(0, 100);
+        } else if (element.getAttribute('aria-label')) {
+          description = element.getAttribute('aria-label');
+        } else if (element.getAttribute('placeholder')) {
+          description = element.getAttribute('placeholder');
+        } else if (element.getAttribute('title')) {
+          description = element.getAttribute('title');
+        } else if (element.value) {
+          description = `Value: ${element.value}`;
+        } else if (type === 'a' && element.href) {
+          description = `Link to: ${element.href}`;
+        }
+        
+        // Generate a unique selector
+        let selector = '';
+        if (element.id) {
+          selector = `#${element.id}`;
+        } else if (element.className) {
+          const classes = element.className.split(' ').filter(c => c).join('.');
+          selector = `${element.tagName.toLowerCase()}.${classes}`;
+          // Make selector more specific if needed
+          const matches = document.querySelectorAll(selector);
+          if (matches.length > 1) {
+            // Add parent context
+            let parent = element.parentElement;
+            while (parent && matches.length > 1) {
+              if (parent.id) {
+                selector = `#${parent.id} ${selector}`;
+                break;
+              } else if (parent.className) {
+                const parentClasses = parent.className.split(' ').filter(c => c).join('.');
+                selector = `${parent.tagName.toLowerCase()}.${parentClasses} ${selector}`;
+                if (document.querySelectorAll(selector).length === 1) break;
+              }
+              parent = parent.parentElement;
+            }
+          }
+        } else {
+          // Fallback to nth-child selector
+          const parent = element.parentElement;
+          const siblings = Array.from(parent.children);
+          const index = siblings.indexOf(element) + 1;
+          selector = `${parent.tagName.toLowerCase()} > ${element.tagName.toLowerCase()}:nth-child(${index})`;
+        }
+        
+        actionables.push({
+          labelNumber: labelNumber++,
+          description: description || `${type} element`,
+          type: type,
+          selector: selector
+        });
+      });
+      
+      return actionables;
+    }
+  });
+  
+  return { actionables: results[0]?.result || [] };
 }
 
 async function waitForTabLoad(tabId) {
