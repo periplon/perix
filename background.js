@@ -598,6 +598,54 @@ async function waitForTabLoad(tabId) {
   });
 }
 
+// Handle persistent connections from content scripts
+const contentScriptPorts = new Map();
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === 'content-script') {
+    const tabId = port.sender?.tab?.id;
+    if (tabId) {
+      contentScriptPorts.set(tabId, port);
+      console.log(`Content script connected from tab ${tabId}`);
+      
+      // Handle messages from content script
+      port.onMessage.addListener((message) => {
+        console.log(`Message from content script (tab ${tabId}):`, message);
+        // Forward responses back through WebSocket if needed
+        if (message.type === 'response' || message.type === 'error') {
+          sendMessage(message);
+        }
+      });
+      
+      // Clean up when content script disconnects
+      port.onDisconnect.addListener(() => {
+        contentScriptPorts.delete(tabId);
+        console.log(`Content script disconnected from tab ${tabId}`);
+        // Check for runtime errors
+        if (chrome.runtime.lastError) {
+          console.error('Content script disconnect error:', chrome.runtime.lastError);
+        }
+      });
+    }
+  }
+});
+
+// Send message to content script
+function sendToContentScript(tabId, message) {
+  const port = contentScriptPorts.get(tabId);
+  if (port) {
+    try {
+      port.postMessage(message);
+      return true;
+    } catch (error) {
+      console.error(`Error sending to content script (tab ${tabId}):`, error);
+      contentScriptPorts.delete(tabId);
+      return false;
+    }
+  }
+  return false;
+}
+
 // Handle messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'getConnectionStatus') {
