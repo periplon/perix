@@ -420,6 +420,13 @@ function getAccessibilitySnapshot(params, id) {
   try {
     const { interestingOnly = true, root = null } = params;
     
+    // Wait for body to be available (for SPAs like Gmail)
+    if (!document.body) {
+      console.warn('Document body not yet available');
+      setTimeout(() => getAccessibilitySnapshot(params, id), 100);
+      return;
+    }
+    
     // Helper functions (same as in background.js but running in page context)
     const isVisible = (element) => {
       if (!element) return false;
@@ -672,16 +679,41 @@ function getAccessibilitySnapshot(params, id) {
       throw new Error('Root element not found');
     }
     
+    // For Gmail and other SPAs, wait if the body has no content
+    if (rootElement === document.body && (!rootElement.children.length || rootElement.innerHTML.trim() === '')) {
+      console.warn('Body is empty, retrying in 500ms...');
+      setTimeout(() => getAccessibilitySnapshot(params, id), 500);
+      return;
+    }
+    
     const snapshot = buildAccessibilityNode(rootElement, {
       interestingOnly
     });
+    
+    // If snapshot is null and we're looking at body, try with interestingOnly = false
+    if (!snapshot && rootElement === document.body && interestingOnly) {
+      console.log('No interesting content found, trying with all content...');
+      const fullSnapshot = buildAccessibilityNode(rootElement, {
+        interestingOnly: false
+      });
+      
+      // Send response back to background script
+      if (port) {
+        port.postMessage({
+          type: 'accessibilitySnapshot',
+          id,
+          snapshot: fullSnapshot || { role: 'document', name: 'Empty document', children: [] }
+        });
+      }
+      return;
+    }
     
     // Send response back to background script
     if (port) {
       port.postMessage({
         type: 'accessibilitySnapshot',
         id,
-        snapshot
+        snapshot: snapshot || { role: 'document', name: 'No accessible content', children: [] }
       });
     }
   } catch (error) {
@@ -697,7 +729,7 @@ function getAccessibilitySnapshot(params, id) {
 }
 
 // Initialize connection with proper checks
-function initializeConnection() {
+function initializeConnection(source = '') {
   // Check if we're in a valid context
   if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id) {
     console.warn('Extension context not available - might be on a restricted page (chrome://, chrome-extension://, etc.)');
@@ -710,6 +742,11 @@ function initializeConnection() {
   if (restrictedProtocols.includes(currentProtocol)) {
     console.warn(`Content script cannot run on ${currentProtocol} pages`);
     return;
+  }
+  
+  // Log the source of initialization only for valid pages
+  if (source) {
+    console.log(`${source}, attempting to connect`);
   }
   
   // Avoid duplicate connections
@@ -739,8 +776,7 @@ window.addEventListener('load', () => {
 // Handle page visibility changes (useful for tabs that were in background)
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && !port) {
-    console.log('Page became visible, attempting to connect');
-    initializeConnection();
+    initializeConnection('Page became visible');
   }
 });
 
