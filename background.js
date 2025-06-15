@@ -407,8 +407,8 @@ async function handleScroll(params) {
         } else {
           // Otherwise use x,y coordinates
           window.scrollTo({
-            left: x !== undefined ? x : window.scrollX,
-            top: y !== undefined ? y : window.scrollY,
+            left: x !== null && x !== undefined ? x : window.scrollX,
+            top: y !== null && y !== undefined ? y : window.scrollY,
             behavior: behavior || 'smooth'
           });
         }
@@ -422,7 +422,13 @@ async function handleScroll(params) {
         throw new Error(`Scroll failed: ${error.message}`);
       }
     },
-    args: [params.x || null, params.y || null, params.selector || null, params.behavior || null]
+    // Convert undefined to null for serialization
+    args: [
+      params.x !== undefined ? params.x : null,
+      params.y !== undefined ? params.y : null,
+      params.selector !== undefined ? params.selector : null,
+      params.behavior !== undefined ? params.behavior : null
+    ]
   });
   
   if (results[0]?.error) {
