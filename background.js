@@ -1,3 +1,96 @@
+// Dynamic import for iframe utilities - will be loaded when needed
+let iframeUtils = null;
+
+async function loadIframeUtils() {
+  if (!iframeUtils) {
+    try {
+      iframeUtils = await import('./iframe-utils.js');
+    } catch (error) {
+      // Fallback for test environment where ES6 imports might not work
+      console.warn('Failed to load iframe-utils.js:', error);
+      // Provide stub implementations for testing
+      iframeUtils = {
+        executeInFrame: async (params) => {
+          // Use standard chrome.scripting.executeScript with frameIds
+          const results = await chrome.scripting.executeScript({
+            target: { tabId: params.tabId, frameIds: [params.frameId || 0] },
+            func: params.func,
+            world: params.world || 'ISOLATED',
+            args: params.args || []
+          });
+          return results[0]?.result;
+        },
+        getAllFrames: async (tabId) => {
+          return await chrome.webNavigation.getAllFrames({ tabId });
+        },
+        findFrames: async () => [],
+        parseFrameSelector: (selector) => {
+          const frameDelimiter = '>>>';
+          if (!selector.includes(frameDelimiter)) {
+            return { frameSelector: null, elementSelector: selector };
+          }
+          const parts = selector.split(frameDelimiter).map(s => s.trim());
+          if (parts.length === 2) {
+            return { frameSelector: parts[0], elementSelector: parts[1] };
+          }
+          return { frameSelectors: parts.slice(0, -1), elementSelector: parts[parts.length - 1] };
+        },
+        executeInAllFrames: async (params) => {
+          const results = await chrome.scripting.executeScript({
+            target: { tabId: params.tabId, allFrames: true },
+            func: params.func,
+            world: params.world || 'ISOLATED',
+            args: params.args || []
+          });
+          return results.filter(r => r.result !== null && r.result !== undefined)
+            .map(r => ({ frameId: r.frameId, documentId: r.documentId, result: r.result }));
+        },
+        waitForIframe: async () => false
+      };
+    }
+  }
+  return iframeUtils;
+}
+
+// Helper functions that use iframe utilities
+async function executeInFrame(params) {
+  const utils = await loadIframeUtils();
+  return utils.executeInFrame(params);
+}
+
+async function getAllFrames(tabId) {
+  const utils = await loadIframeUtils();
+  return utils.getAllFrames(tabId);
+}
+
+async function findFrames(tabId, criteria) {
+  const utils = await loadIframeUtils();
+  return utils.findFrames(tabId, criteria);
+}
+
+function parseFrameSelector(selector) {
+  // This can be synchronous since it doesn't depend on external modules
+  const frameDelimiter = '>>>';
+  if (!selector.includes(frameDelimiter)) {
+    return { frameSelector: null, elementSelector: selector };
+  }
+  const parts = selector.split(frameDelimiter).map(s => s.trim());
+  if (parts.length === 2) {
+    return { frameSelector: parts[0], elementSelector: parts[1] };
+  }
+  return { frameSelectors: parts.slice(0, -1), elementSelector: parts[parts.length - 1] };
+}
+
+async function executeInAllFrames(params) {
+  const utils = await loadIframeUtils();
+  return utils.executeInAllFrames(params);
+}
+
+async function waitForIframe(tabId, selector, timeout) {
+  const utils = await loadIframeUtils();
+  return utils.waitForIframe(tabId, selector, timeout);
+}
+
 let wsConnection = null;
 let wsReconnectInterval = null;
 const WS_URL = 'ws://localhost:8765';
@@ -32,7 +125,9 @@ const commandHandlers = {
   'tabs.setSessionStorage': handleSetSessionStorage,
   'tabs.clearSessionStorage': handleClearSessionStorage,
   'tabs.getActionables': handleGetActionables,
-  'tabs.getAccessibilitySnapshot': handleAccessibilitySnapshot
+  'tabs.getAccessibilitySnapshot': handleAccessibilitySnapshot,
+  'tabs.getFrames': handleGetFrames,
+  'tabs.waitForIframe': handleWaitForIframe
 };
 
 function connectWebSocket() {
@@ -199,6 +294,26 @@ async function handleGoForward(params) {
 }
 
 async function handleExecuteScript(params) {
+  // Support frame execution
+  if (params.frameId !== undefined || params.allFrames) {
+    if (params.allFrames) {
+      const results = await executeInAllFrames({
+        tabId: params.tabId,
+        func: new Function(params.script),
+        world: params.world || 'ISOLATED'
+      });
+      return results;
+    } else {
+      return await executeInFrame({
+        tabId: params.tabId,
+        frameId: params.frameId,
+        func: params.script,
+        world: params.world || 'ISOLATED'
+      });
+    }
+  }
+  
+  // Default behavior for backward compatibility
   const results = await chrome.scripting.executeScript({
     target: { tabId: params.tabId },
     func: new Function(params.script),
@@ -236,6 +351,52 @@ async function handleCaptureVideo(params) {
 }
 
 async function handleExtractText(params) {
+  // Parse frame selector if present
+  const { frameSelector, elementSelector } = parseFrameSelector(params.selector || '');
+  
+  if (frameSelector) {
+    // Find matching frames
+    const frameIds = await findFrames(params.tabId, { selector: frameSelector });
+    if (frameIds.length === 0) {
+      throw new Error(`No frames found matching selector: ${frameSelector}`);
+    }
+    
+    // Execute in the first matching frame
+    const result = await executeInFrame({
+      tabId: params.tabId,
+      frameId: frameIds[0],
+      func: (selector) => {
+        if (selector) {
+          const elements = document.querySelectorAll(selector);
+          return Array.from(elements).map(el => el.textContent);
+        }
+        return document.body.textContent;
+      },
+      args: [elementSelector]
+    });
+    return { text: result };
+  }
+  
+  // Check if we need to search all frames
+  if (params.allFrames) {
+    const results = await executeInAllFrames({
+      tabId: params.tabId,
+      func: (selector) => {
+        if (selector) {
+          const elements = document.querySelectorAll(selector);
+          return Array.from(elements).map(el => el.textContent);
+        }
+        return document.body.textContent;
+      },
+      args: [params.selector]
+    });
+    
+    // Combine results from all frames
+    const allText = results.flatMap(r => r.result);
+    return { text: allText, frames: results.length };
+  }
+  
+  // Default behavior
   const results = await chrome.scripting.executeScript({
     target: { tabId: params.tabId },
     func: (selector) => {
@@ -251,6 +412,76 @@ async function handleExtractText(params) {
 }
 
 async function handleFindElements(params) {
+  // Parse frame selector if present
+  const { frameSelector, elementSelector } = parseFrameSelector(params.selector || '');
+  
+  if (frameSelector) {
+    // Find matching frames
+    const frameIds = await findFrames(params.tabId, { selector: frameSelector });
+    if (frameIds.length === 0) {
+      throw new Error(`No frames found matching selector: ${frameSelector}`);
+    }
+    
+    // Execute in the first matching frame
+    const result = await executeInFrame({
+      tabId: params.tabId,
+      frameId: frameIds[0],
+      func: (selector) => {
+        const elements = document.querySelectorAll(selector);
+        return Array.from(elements).map((el, index) => ({
+          index,
+          tagName: el.tagName,
+          id: el.id,
+          className: el.className,
+          text: el.textContent?.substring(0, 100),
+          attributes: Array.from(el.attributes).reduce((acc, attr) => {
+            acc[attr.name] = attr.value;
+            return acc;
+          }, {}),
+          rect: el.getBoundingClientRect()
+        }));
+      },
+      args: [elementSelector]
+    });
+    return { elements: result || [], frameId: frameIds[0] };
+  }
+  
+  // Check if we need to search all frames
+  if (params.allFrames) {
+    const results = await executeInAllFrames({
+      tabId: params.tabId,
+      func: (selector) => {
+        const elements = document.querySelectorAll(selector);
+        return Array.from(elements).map((el, index) => ({
+          index,
+          tagName: el.tagName,
+          id: el.id,
+          className: el.className,
+          text: el.textContent?.substring(0, 100),
+          attributes: Array.from(el.attributes).reduce((acc, attr) => {
+            acc[attr.name] = attr.value;
+            return acc;
+          }, {}),
+          rect: el.getBoundingClientRect()
+        }));
+      },
+      args: [params.selector]
+    });
+    
+    // Combine results from all frames with frame info
+    const allElements = [];
+    results.forEach(frameResult => {
+      frameResult.result.forEach(element => {
+        allElements.push({
+          ...element,
+          frameId: frameResult.frameId
+        });
+      });
+    });
+    return { elements: allElements, frames: results.length };
+  }
+  
+  // Default behavior
   const results = await chrome.scripting.executeScript({
     target: { tabId: params.tabId },
     func: (selector) => {
@@ -274,6 +505,54 @@ async function handleFindElements(params) {
 }
 
 async function handleClick(params) {
+  // Parse frame selector if present
+  const { frameSelector, elementSelector } = parseFrameSelector(params.selector || '');
+  
+  if (frameSelector) {
+    // Find matching frames
+    const frameIds = await findFrames(params.tabId, { selector: frameSelector });
+    if (frameIds.length === 0) {
+      throw new Error(`No frames found matching selector: ${frameSelector}`);
+    }
+    
+    // Execute in the first matching frame
+    const result = await executeInFrame({
+      tabId: params.tabId,
+      frameId: frameIds[0],
+      func: (selector, index) => {
+        const elements = document.querySelectorAll(selector);
+        const element = elements[index || 0];
+        if (element) {
+          element.click();
+          return true;
+        }
+        return false;
+      },
+      args: [elementSelector, params.index || 0]
+    });
+    return { success: result || false, frameId: frameIds[0] };
+  }
+  
+  // Support clicking in a specific frame by ID
+  if (params.frameId !== undefined) {
+    const result = await executeInFrame({
+      tabId: params.tabId,
+      frameId: params.frameId,
+      func: (selector, index) => {
+        const elements = document.querySelectorAll(selector);
+        const element = elements[index || 0];
+        if (element) {
+          element.click();
+          return true;
+        }
+        return false;
+      },
+      args: [params.selector, params.index || 0]
+    });
+    return { success: result || false };
+  }
+  
+  // Default behavior
   const results = await chrome.scripting.executeScript({
     target: { tabId: params.tabId },
     func: (selector, index) => {
@@ -291,6 +570,64 @@ async function handleClick(params) {
 }
 
 async function handleType(params) {
+  // Parse frame selector if present
+  const { frameSelector, elementSelector } = parseFrameSelector(params.selector || '');
+  
+  if (frameSelector) {
+    // Find matching frames
+    const frameIds = await findFrames(params.tabId, { selector: frameSelector });
+    if (frameIds.length === 0) {
+      throw new Error(`No frames found matching selector: ${frameSelector}`);
+    }
+    
+    // Execute in the first matching frame
+    const result = await executeInFrame({
+      tabId: params.tabId,
+      frameId: frameIds[0],
+      func: (selector, text, append) => {
+        const element = document.querySelector(selector);
+        if (element && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA')) {
+          if (!append) {
+            element.value = text;
+          } else {
+            element.value += text;
+          }
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+          element.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        }
+        return false;
+      },
+      args: [elementSelector, params.text, params.append || false]
+    });
+    return { success: result || false, frameId: frameIds[0] };
+  }
+  
+  // Support typing in a specific frame by ID
+  if (params.frameId !== undefined) {
+    const result = await executeInFrame({
+      tabId: params.tabId,
+      frameId: params.frameId,
+      func: (selector, text, append) => {
+        const element = document.querySelector(selector);
+        if (element && (element.tagName === 'INPUT' || element.tagName === 'TEXTAREA')) {
+          if (!append) {
+            element.value = text;
+          } else {
+            element.value += text;
+          }
+          element.dispatchEvent(new Event('input', { bubbles: true }));
+          element.dispatchEvent(new Event('change', { bubbles: true }));
+          return true;
+        }
+        return false;
+      },
+      args: [params.selector, params.text, params.append || false]
+    });
+    return { success: result || false };
+  }
+  
+  // Default behavior
   const results = await chrome.scripting.executeScript({
     target: { tabId: params.tabId },
     func: (selector, text, append) => {
@@ -313,9 +650,10 @@ async function handleType(params) {
 }
 
 async function handleSendKey(params) {
-  const results = await chrome.scripting.executeScript({
-    target: { tabId: params.tabId },
-    func: (selector, key, modifiers) => {
+  // Parse frame selector if present
+  const { frameSelector, elementSelector } = parseFrameSelector(params.selector || '');
+  
+  const sendKeyFunc = (selector, key, modifiers) => {
       const element = selector ? document.querySelector(selector) : document.activeElement;
       if (!element) {
         return { success: false, error: 'No element found' };
@@ -367,46 +705,113 @@ async function handleSendKey(params) {
       element.dispatchEvent(keyupEvent);
       
       return { success: true };
-    },
+  };
+  
+  if (frameSelector) {
+    // Find matching frames
+    const frameIds = await findFrames(params.tabId, { selector: frameSelector });
+    if (frameIds.length === 0) {
+      throw new Error(`No frames found matching selector: ${frameSelector}`);
+    }
+    
+    // Execute in the first matching frame
+    const result = await executeInFrame({
+      tabId: params.tabId,
+      frameId: frameIds[0],
+      func: sendKeyFunc,
+      args: [elementSelector, params.key, params.modifiers]
+    });
+    return result || { success: false, error: 'Script execution failed' };
+  }
+  
+  // Support sending key in a specific frame by ID
+  if (params.frameId !== undefined) {
+    const result = await executeInFrame({
+      tabId: params.tabId,
+      frameId: params.frameId,
+      func: sendKeyFunc,
+      args: [params.selector, params.key, params.modifiers]
+    });
+    return result || { success: false, error: 'Script execution failed' };
+  }
+  
+  // Default behavior
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: params.tabId },
+    func: sendKeyFunc,
     args: [params.selector, params.key, params.modifiers]
   });
   return results[0]?.result || { success: false, error: 'Script execution failed' };
 }
 
 async function handleScroll(params) {
+  const scrollFunc = (x, y, selector, behavior) => {
+    try {
+      // If selector is provided, scroll to that element
+      if (selector) {
+        const element = document.querySelector(selector);
+        if (!element) {
+          throw new Error(`Element not found: ${selector}`);
+        }
+        element.scrollIntoView({
+          behavior: behavior || 'smooth',
+          block: 'center',
+          inline: 'center'
+        });
+      } else {
+        // Otherwise use x,y coordinates
+        window.scrollTo({
+          left: x !== undefined ? x : window.scrollX,
+          top: y !== undefined ? y : window.scrollY,
+          behavior: behavior || 'smooth'
+        });
+      }
+      
+      // Return the new scroll position
+      return { 
+        x: window.scrollX || window.pageXOffset || 0, 
+        y: window.scrollY || window.pageYOffset || 0 
+      };
+    } catch (error) {
+      throw new Error(`Scroll failed: ${error.message}`);
+    }
+  };
+  
+  // Parse frame selector if present
+  const { frameSelector, elementSelector } = parseFrameSelector(params.selector || '');
+  
+  if (frameSelector) {
+    // Find matching frames
+    const frameIds = await findFrames(params.tabId, { selector: frameSelector });
+    if (frameIds.length === 0) {
+      throw new Error(`No frames found matching selector: ${frameSelector}`);
+    }
+    
+    // Execute in the first matching frame
+    const result = await executeInFrame({
+      tabId: params.tabId,
+      frameId: frameIds[0],
+      func: scrollFunc,
+      args: [params.x, params.y, elementSelector, params.behavior]
+    });
+    return result;
+  }
+  
+  // Support scrolling in a specific frame by ID
+  if (params.frameId !== undefined) {
+    const result = await executeInFrame({
+      tabId: params.tabId,
+      frameId: params.frameId,
+      func: scrollFunc,
+      args: [params.x, params.y, params.selector, params.behavior]
+    });
+    return result;
+  }
+  
+  // Default behavior
   const results = await chrome.scripting.executeScript({
     target: { tabId: params.tabId },
-    func: (x, y, selector, behavior) => {
-      try {
-        // If selector is provided, scroll to that element
-        if (selector) {
-          const element = document.querySelector(selector);
-          if (!element) {
-            throw new Error(`Element not found: ${selector}`);
-          }
-          element.scrollIntoView({
-            behavior: behavior || 'smooth',
-            block: 'center',
-            inline: 'center'
-          });
-        } else {
-          // Otherwise use x,y coordinates
-          window.scrollTo({
-            left: x !== undefined ? x : window.scrollX,
-            top: y !== undefined ? y : window.scrollY,
-            behavior: behavior || 'smooth'
-          });
-        }
-        
-        // Return the new scroll position
-        return { 
-          x: window.scrollX || window.pageXOffset || 0, 
-          y: window.scrollY || window.pageYOffset || 0 
-        };
-      } catch (error) {
-        throw new Error(`Scroll failed: ${error.message}`);
-      }
-    },
+    func: scrollFunc,
     args: [params.x, params.y, params.selector, params.behavior]
   });
   
@@ -430,6 +835,74 @@ async function handleWaitForElement(params) {
   const checkInterval = 100;
   const startTime = Date.now();
   
+  // Parse frame selector if present
+  const { frameSelector, elementSelector } = parseFrameSelector(params.selector || '');
+  
+  if (frameSelector) {
+    // Wait for iframe first
+    const iframeReady = await waitForIframe(params.tabId, frameSelector, timeout);
+    if (!iframeReady) {
+      return { found: false, elapsed: timeout, error: 'Iframe not found or not ready' };
+    }
+    
+    // Find matching frames
+    const frameIds = await findFrames(params.tabId, { selector: frameSelector });
+    if (frameIds.length === 0) {
+      return { found: false, elapsed: Date.now() - startTime, error: 'No frames found matching selector' };
+    }
+    
+    // Wait for element in frame
+    while (Date.now() - startTime < timeout) {
+      try {
+        const result = await executeInFrame({
+          tabId: params.tabId,
+          frameId: frameIds[0],
+          func: (selector) => {
+            return document.querySelector(selector) !== null;
+          },
+          args: [elementSelector]
+        });
+        
+        if (result === true) {
+          return { found: true, elapsed: Date.now() - startTime, frameId: frameIds[0] };
+        }
+      } catch (error) {
+        console.warn(`Error checking element in frame: ${error.message}`);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, checkInterval));
+    }
+    
+    return { found: false, elapsed: timeout };
+  }
+  
+  // Support waiting in a specific frame by ID
+  if (params.frameId !== undefined) {
+    while (Date.now() - startTime < timeout) {
+      try {
+        const result = await executeInFrame({
+          tabId: params.tabId,
+          frameId: params.frameId,
+          func: (selector) => {
+            return document.querySelector(selector) !== null;
+          },
+          args: [params.selector]
+        });
+        
+        if (result === true) {
+          return { found: true, elapsed: Date.now() - startTime };
+        }
+      } catch (error) {
+        console.warn(`Error checking element in frame: ${error.message}`);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, checkInterval));
+    }
+    
+    return { found: false, elapsed: timeout };
+  }
+  
+  // Default behavior (main frame)
   while (Date.now() - startTime < timeout) {
     try {
       const results = await chrome.scripting.executeScript({
@@ -490,26 +963,54 @@ async function handleDeleteCookie(params) {
 }
 
 async function handleGetLocalStorage(params) {
+  const getStorageFunc = (key) => {
+    if (key) {
+      return { [key]: localStorage.getItem(key) };
+    }
+    return { ...localStorage };
+  };
+  
+  // Support getting storage from a specific frame by ID
+  if (params.frameId !== undefined) {
+    const result = await executeInFrame({
+      tabId: params.tabId,
+      frameId: params.frameId,
+      func: getStorageFunc,
+      args: [params.key]
+    });
+    return { storage: result };
+  }
+  
+  // Default behavior
   const results = await chrome.scripting.executeScript({
     target: { tabId: params.tabId },
-    func: (key) => {
-      if (key) {
-        return { [key]: localStorage.getItem(key) };
-      }
-      return { ...localStorage };
-    },
+    func: getStorageFunc,
     args: [params.key]
   });
   return { storage: results[0]?.result };
 }
 
 async function handleSetLocalStorage(params) {
+  const setStorageFunc = (key, value) => {
+    localStorage.setItem(key, value);
+    return true;
+  };
+  
+  // Support setting storage in a specific frame by ID
+  if (params.frameId !== undefined) {
+    const result = await executeInFrame({
+      tabId: params.tabId,
+      frameId: params.frameId,
+      func: setStorageFunc,
+      args: [params.key, params.value]
+    });
+    return { success: result || false };
+  }
+  
+  // Default behavior
   const results = await chrome.scripting.executeScript({
     target: { tabId: params.tabId },
-    func: (key, value) => {
-      localStorage.setItem(key, value);
-      return true;
-    },
+    func: setStorageFunc,
     args: [params.key, params.value]
   });
   return { success: results[0]?.result || false };
@@ -564,9 +1065,7 @@ async function handleClearSessionStorage(params) {
 }
 
 async function handleGetActionables(params) {
-  const results = await chrome.scripting.executeScript({
-    target: { tabId: params.tabId },
-    func: () => {
+  const getActionablesFunc = () => {
       const actionables = [];
       let labelNumber = 0;
 
@@ -696,7 +1195,42 @@ async function handleGetActionables(params) {
       });
       
       return actionables;
-    }
+  };
+  
+  // Check if we need to search all frames
+  if (params.allFrames) {
+    const results = await executeInAllFrames({
+      tabId: params.tabId,
+      func: getActionablesFunc
+    });
+    
+    // Combine results from all frames with frame info
+    const allActionables = [];
+    results.forEach(frameResult => {
+      frameResult.result.forEach(actionable => {
+        allActionables.push({
+          ...actionable,
+          frameId: frameResult.frameId
+        });
+      });
+    });
+    return { actionables: allActionables, frames: results.length };
+  }
+  
+  // Support getting actionables from a specific frame by ID
+  if (params.frameId !== undefined) {
+    const result = await executeInFrame({
+      tabId: params.tabId,
+      frameId: params.frameId,
+      func: getActionablesFunc
+    });
+    return { actionables: result || [], frameId: params.frameId };
+  }
+  
+  // Default behavior (main frame)
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: params.tabId },
+    func: getActionablesFunc
   });
   
   return { actionables: results[0]?.result || [] };
@@ -1024,6 +1558,27 @@ async function waitForTabLoad(tabId) {
     };
     chrome.tabs.onUpdated.addListener(listener);
   });
+}
+
+// New handler for getting frame information
+async function handleGetFrames(params) {
+  const frames = await getAllFrames(params.tabId);
+  return { frames };
+}
+
+// New handler for waiting for iframe to load
+async function handleWaitForIframe(params) {
+  if (!params.tabId || !params.selector) {
+    throw new Error('tabId and selector are required');
+  }
+  
+  const timeout = params.timeout || 5000;
+  const loaded = await waitForIframe(params.tabId, params.selector, timeout);
+  
+  return { 
+    loaded, 
+    elapsed: loaded ? 'iframe loaded' : `timeout after ${timeout}ms` 
+  };
 }
 
 // Handle persistent connections from content scripts
