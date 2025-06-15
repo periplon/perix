@@ -57,17 +57,34 @@
         </ol>
         <pre>chrome.tabs.query({active: true, currentWindow: true}, (tabs) => console.log('Current tab:', tabs[0]));</pre>
         
-        <h3>Method 2: Using the Helper Function (from any web page)</h3>
-        <p>The extension now includes a helper function that lets you test Chrome APIs from any web page's console:</p>
-        <pre>// This will send the request to the background script and show the result
-testChromeAPI('tabs.query');</pre>
+        <h3>Method 2: Testing from Any Web Page Console</h3>
+        <p>You can test Chrome APIs from any web page's console using these methods:</p>
+        
+        <h4>Option A: Direct Event Dispatch</h4>
+        <pre>// Send a test request directly
+window.dispatchEvent(new CustomEvent('test-chrome-api', { detail: { apiCall: 'tabs.query' } }));</pre>
+        
+        <h4>Option B: Using Helper Function</h4>
+        <p>First, paste this helper code into the console:</p>
+        <pre>// Helper function for easier testing
+window.testChromeAPI = function(apiCall) {
+  window.dispatchEvent(new CustomEvent('test-chrome-api', {
+    detail: { apiCall: apiCall }
+  }));
+  console.log('Request sent to extension. Check console for results.');
+};</pre>
+        <p>Then use it like this:</p>
+        <pre>testChromeAPI('tabs.query');</pre>
         
         <h3>Common Chrome API Tests:</h3>
         <pre>// Test tab operations (run in background console)
 chrome.tabs.query({}, (tabs) => console.log('All tabs:', tabs));
 chrome.tabs.create({url: 'https://example.com'}, (tab) => console.log('Created tab:', tab));
 
-// Test from web page console using helper
+// Test from web page console using direct event
+window.dispatchEvent(new CustomEvent('test-chrome-api', { detail: { apiCall: 'tabs.query' } }));
+
+// Or using helper function (after pasting helper code)
 testChromeAPI('tabs.query');  // Gets current tab info</pre>
         
         <h3>Test Accessibility Snapshot:</h3>
