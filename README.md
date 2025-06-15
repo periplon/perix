@@ -387,10 +387,10 @@ Error:
 
 #### Accessibility
 
-**tabs.accessibility_snapshot** - Get accessibility tree snapshot
+**test.getAccessibilitySnapshot** - Get accessibility tree snapshot
 ```json
 {
-  "command": "tabs.accessibility_snapshot",
+  "command": "test.getAccessibilitySnapshot",
   "params": {
     "tabId": 123,
     "interestingOnly": true,

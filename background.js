@@ -31,7 +31,7 @@ const commandHandlers = {
   'tabs.setSessionStorage': handleSetSessionStorage,
   'tabs.clearSessionStorage': handleClearSessionStorage,
   'tabs.getActionables': handleGetActionables,
-  'tabs.accessibility_snapshot': handleAccessibilitySnapshot
+  'test.getAccessibilitySnapshot': handleAccessibilitySnapshot
 };
 
 function connectWebSocket() {
